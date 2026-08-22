@@ -13,6 +13,14 @@ PEAK1_UTC_END = 4 * 60 + 0  # 04:00 UTC
 PEAK2_UTC_START = 6 * 60 + 0  # 06:00 UTC
 PEAK2_UTC_END = 10 * 60 + 0  # 10:00 UTC
 
+# Weekend off-peak rule (DeepSeek announcement):
+# From Sunday 2026-08-23 00:00 Beijing time the off-peak rate applies
+# for the entire weekend (Saturday + Sunday, Beijing time).
+WEEKEND_RULE_START_UTC = datetime.datetime(
+    2026, 8, 22, 16, 0, tzinfo=datetime.timezone.utc
+)  # = 2026-08-23 00:00 Asia/Shanghai
+BJ_TZ = zoneinfo.ZoneInfo("Asia/Shanghai")
+
 # Pfade für Konfigurationsspeicherung
 POS_FILE = os.path.expanduser("~/.deepseek_tarif_pos")
 CONFIG_FILE = os.path.expanduser("~/.deepseek_tarif_config")
@@ -66,6 +74,7 @@ COLOR_TEXT_DIM = "#78909c"  # Filigranes Grau
 COLOR_TICK_MINOR = "#404040"  # Korrigierter Hex-Farbwert für kleine Ticks
 COLOR_ACCENT = "#64b5f6"  # Hellblau
 COLOR_NEEDLE = "#ffffff"  # Zeiger-Farbe
+COLOR_WEEKEND = "#f57c00"  # Orange (Wochenende: ganztägig Off-Peak)
 
 
 def get_times(tz_name):
@@ -86,40 +95,77 @@ def utc_to_local_string(utc_minutes, offset_hours):
   return f"{hours:02d}:{minutes:02d}"
 
 
-def calculate_status(now_utc):
-  """Berechnet Preiskategorie und verbleibende Sekunden bis Wechsel."""
+def status_at(now_utc):
+  """Returns the current rate key: 'PEAK', 'STANDARD' or 'WEEKEND'."""
+  bj_now = now_utc.astimezone(BJ_TZ)
+  if now_utc >= WEEKEND_RULE_START_UTC and bj_now.weekday() >= 5:
+    return "WEEKEND"
   current_min = now_utc.hour * 60 + now_utc.minute
-  seconds_offset = now_utc.second
-
   if PEAK1_UTC_START <= current_min < PEAK1_UTC_END:
-    min_left = PEAK1_UTC_END - current_min
-    return (
-        "PEAK",
-        min_left * 60 - seconds_offset,
-        COLOR_PEAK,
-    )
+    return "PEAK"
+  if PEAK2_UTC_START <= current_min < PEAK2_UTC_END:
+    return "PEAK"
+  return "STANDARD"
 
-  elif PEAK2_UTC_START <= current_min < PEAK2_UTC_END:
-    min_left = PEAK2_UTC_END - current_min
-    return (
-        "PEAK",
-        min_left * 60 - seconds_offset,
-        COLOR_PEAK,
-    )
 
-  else:
-    if current_min < PEAK1_UTC_START:
-      min_left = PEAK1_UTC_START - current_min
-    elif current_min < PEAK2_UTC_START:
-      min_left = PEAK2_UTC_START - current_min
-    else:
-      min_left = (24 * 60 - current_min) + PEAK1_UTC_START
+def day_transitions(day_bj):
+  """All rate changes on one Beijing calendar day (aware 00:00 Beijing).
 
-    return (
-        "STANDARD",
-        min_left * 60 - seconds_offset,
-        COLOR_STANDARD,
-    )
+  Returns a list of (utc_datetime, status_after) tuples.
+  """
+  out = []
+  w = day_bj.weekday()
+  weekend_rule_day = day_bj.date() >= datetime.date(2026, 8, 23)
+
+  if weekend_rule_day and w >= 5:
+    # Weekend: off-peak all day, next change is Monday 00:00 Beijing
+    monday_bj = day_bj + datetime.timedelta(days=(7 - w))
+    out.append((monday_bj.astimezone(datetime.timezone.utc), "STANDARD"))
+    return out
+
+  # Weekday logic (also applies to Saturday 2026-08-22 before the rule start)
+  d = day_bj.date()
+  for hh, status in [
+      (1, "PEAK"), (4, "STANDARD"), (6, "PEAK"), (10, "STANDARD")]:
+    out.append((
+        datetime.datetime(d.year, d.month, d.day, hh, 0,
+                          tzinfo=datetime.timezone.utc),
+        status,
+    ))
+
+  # Friday: weekend off-peak starts Saturday 00:00 Beijing
+  if w == 4 and (day_bj + datetime.timedelta(days=1)).date() >= datetime.date(2026, 8, 23):
+    out.append((
+        (day_bj + datetime.timedelta(days=1)).astimezone(datetime.timezone.utc),
+        "WEEKEND",
+    ))
+
+  # Special case: the rule start instant on 2026-08-22 16:00 UTC
+  if day_bj.date() == datetime.date(2026, 8, 22):
+    out.append((WEEKEND_RULE_START_UTC, "WEEKEND"))
+
+  return out
+
+
+def calculate_status(now_utc):
+  """Berechnet Preiskategorie, Sekunden bis zum nächsten Wechsel, Farbe und Key."""
+  key = status_at(now_utc)
+
+  bj_now = now_utc.astimezone(BJ_TZ)
+  bj_today = bj_now.replace(hour=0, minute=0, second=0, microsecond=0)
+  candidates = []
+  for offset in range(9):
+    day_bj = bj_today + datetime.timedelta(days=offset)
+    candidates.extend(day_transitions(day_bj))
+  future = [(t, s) for t, s in candidates if t > now_utc]
+  next_t, _ = min(future, key=lambda item: item[0]) if future else (None, None)
+  sec_left = (next_t - now_utc).total_seconds() if next_t else 0
+
+  if key == "WEEKEND":
+    return "WOCHENENDE OFF-PEAK", sec_left, COLOR_WEEKEND, key
+  if key == "PEAK":
+    return "PEAK", sec_left, COLOR_PEAK, key
+  return "STANDARD", sec_left, COLOR_STANDARD, key
 
 
 class DeepSeekFiligreeGUI:
@@ -247,6 +293,16 @@ class DeepSeekFiligreeGUI:
     )
     self.lbl_std_times.pack(side=tk.LEFT)
 
+    # Wochenend-Hinweis (orange)
+    self.lbl_weekend_info = tk.Label(
+        root,
+        text="Wochenende (Sa + So, Peking): ganztägig Off-Peak ab 23.08.2026",
+        font=("Segoe UI", 7),
+        fg=COLOR_WEEKEND,
+        bg=COLOR_BG,
+    )
+    self.lbl_weekend_info.pack()
+
     self.update_loop()
 
   def _read_position(self):
@@ -290,37 +346,40 @@ class DeepSeekFiligreeGUI:
       local_min = (utc_min + local_offset_min) % (24 * 60)
       return padding_x + (local_min / (24 * 60)) * usable_w
 
-    # --- 1. Grundbalken (Grün / Standard) ---
+    # --- 1. Grundbalken (Grün / Standard, Orange am Wochenende) ---
+    status_key = status_at(now_utc)
+    base_color = COLOR_WEEKEND if status_key == "WEEKEND" else COLOR_STANDARD
     self.canvas.create_rectangle(
         padding_x,
         bar_y_top,
         padding_x + usable_w,
         bar_y_bottom,
-        fill=COLOR_STANDARD,
+        fill=base_color,
         outline="",
     )
 
-    # --- 2. Peak-Zonen (Rot) ---
-    p1_s, p1_e = utc_min_to_px(PEAK1_UTC_START), utc_min_to_px(PEAK1_UTC_END)
-    p2_s, p2_e = utc_min_to_px(PEAK2_UTC_START), utc_min_to_px(PEAK2_UTC_END)
+    # --- 2. Peak-Zonen (Rot) – nur an Werktagen ---
+    if status_key != "WEEKEND":
+      p1_s, p1_e = utc_min_to_px(PEAK1_UTC_START), utc_min_to_px(PEAK1_UTC_END)
+      p2_s, p2_e = utc_min_to_px(PEAK2_UTC_START), utc_min_to_px(PEAK2_UTC_END)
 
-    for ps, pe in [(p1_s, p1_e), (p2_s, p2_e)]:
-      if ps < pe:
-        self.canvas.create_rectangle(
-            ps, bar_y_top, pe, bar_y_bottom, fill=COLOR_PEAK, outline=""
-        )
-      else:
-        self.canvas.create_rectangle(
-            ps,
-            bar_y_top,
-            padding_x + usable_w,
-            bar_y_bottom,
-            fill=COLOR_PEAK,
-            outline="",
-        )
-        self.canvas.create_rectangle(
-            padding_x, bar_y_top, pe, bar_y_bottom, fill=COLOR_PEAK, outline=""
-        )
+      for ps, pe in [(p1_s, p1_e), (p2_s, p2_e)]:
+        if ps < pe:
+          self.canvas.create_rectangle(
+              ps, bar_y_top, pe, bar_y_bottom, fill=COLOR_PEAK, outline=""
+          )
+        else:
+          self.canvas.create_rectangle(
+              ps,
+              bar_y_top,
+              padding_x + usable_w,
+              bar_y_bottom,
+              fill=COLOR_PEAK,
+              outline="",
+          )
+          self.canvas.create_rectangle(
+              padding_x, bar_y_top, pe, bar_y_bottom, fill=COLOR_PEAK, outline=""
+          )
 
     # --- 3. Filigrane Stunden-Ticks & Uhrzeiten ---
     for h in range(25):
@@ -384,7 +443,7 @@ class DeepSeekFiligreeGUI:
   def update_loop(self):
     now_utc, now_local, offset_hours = get_times(self.tz_name)
 
-    status_text, sec_left, bg_color = calculate_status(now_utc)
+    status_text, sec_left, bg_color, status_key = calculate_status(now_utc)
 
     hrs = int(sec_left // 3600)
     mins = int((sec_left % 3600) // 60)
@@ -395,18 +454,27 @@ class DeepSeekFiligreeGUI:
 
     self.draw_filigree_timeline(now_utc, offset_hours)
 
-    p1_s = utc_to_local_string(PEAK1_UTC_START, offset_hours)
-    p1_e = utc_to_local_string(PEAK1_UTC_END, offset_hours)
-    p2_s = utc_to_local_string(PEAK2_UTC_START, offset_hours)
-    p2_e = utc_to_local_string(PEAK2_UTC_END, offset_hours)
-    wins = sorted([(p1_s, p1_e), (p2_s, p2_e)])
+    if status_key == "WEEKEND":
+      self.lbl_peak_times.config(text=" –", fg="#ffffff")
+      self.lbl_std_times.config(
+          text=" ganztägig 00:00–24:00 (Wochenende)",
+          fg=COLOR_WEEKEND,
+      )
+    else:
+      p1_s = utc_to_local_string(PEAK1_UTC_START, offset_hours)
+      p1_e = utc_to_local_string(PEAK1_UTC_END, offset_hours)
+      p2_s = utc_to_local_string(PEAK2_UTC_START, offset_hours)
+      p2_e = utc_to_local_string(PEAK2_UTC_END, offset_hours)
+      wins = sorted([(p1_s, p1_e), (p2_s, p2_e)])
 
-    self.lbl_peak_times.config(
-        text=f" {wins[0][0]}–{wins[0][1]} & {wins[1][0]}–{wins[1][1]}"
-    )
-    self.lbl_std_times.config(
-        text=f" {wins[0][1]}–{wins[1][0]} & {wins[1][1]}–{wins[0][0]}"
-    )
+      self.lbl_peak_times.config(
+          text=f" {wins[0][0]}–{wins[0][1]} & {wins[1][0]}–{wins[1][1]}",
+          fg="#ffffff",
+      )
+      self.lbl_std_times.config(
+          text=f" {wins[0][1]}–{wins[1][0]} & {wins[1][1]}–{wins[0][0]}",
+          fg="#ffffff",
+      )
 
     self.root.after(1000, self.update_loop)
 
