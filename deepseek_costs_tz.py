@@ -1,7 +1,13 @@
+import csv
 import datetime
+import json
 import os
+import threading
+import time
 import tkinter as tk
+import urllib.request
 import zoneinfo
+from tkinter import ttk
 
 # ==========================================
 # KONFIGURATION DER DEEPSEEK V4 PEAK-ZEITEN
@@ -25,6 +31,14 @@ BJ_TZ = zoneinfo.ZoneInfo("Asia/Shanghai")
 POS_FILE = os.path.expanduser("~/.deepseek_tarif_pos")
 CONFIG_FILE = os.path.expanduser("~/.deepseek_tarif_config")
 DEFAULT_TZ = "Europe/Berlin"
+
+# Realtime-Guthaben-Überwachung (GET /user/balance)
+BALANCE_URL = "https://api.deepseek.com/user/balance"
+API_KEY_FILE = os.path.expanduser("~/.deepseek_api_key")
+HISTORY_FILE = os.path.expanduser("~/.deepseek_balance_history.json")
+DAILY_CSV_FILE = os.path.expanduser("~/.deepseek_daily_usage.csv")
+POLL_INTERVAL_S = 300  # alle 5 Minuten abfragen
+MAX_HISTORY = 50000
 
 # Häufig genutzte Zeitzonen (Dropdown-Liste)
 COMMON_TIMEZONES = [
@@ -60,6 +74,116 @@ def save_timezone(tz_name):
     try:
         with open(CONFIG_FILE, "w") as f:
             f.write(tz_name)
+    except Exception:
+        pass
+
+
+def load_api_key():
+    """Liest den API-Key aus der Umgebungsvariable oder ~/.deepseek_api_key."""
+    key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
+    if key:
+        return key
+    try:
+        with open(API_KEY_FILE, "r") as f:
+            return f.read().strip()
+    except Exception:
+        return ""
+
+
+def fetch_balance(api_key):
+    """Ruft GET /user/balance ab und liefert das JSON-Objekt."""
+    req = urllib.request.Request(
+        BALANCE_URL,
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def parse_balance(data):
+    """Extrahiert die Guthaben-Felder (unterstützt Flat- und balance_infos-Format)."""
+    def _f(obj, field):
+        try:
+            return float(obj.get(field, 0))
+        except (TypeError, ValueError):
+            return 0.0
+
+    is_available = bool(data.get("is_available", True))
+    infos = data.get("balance_infos") or []
+    if infos:
+        info = infos[0]
+        return {
+            "total": _f(info, "total_balance"),
+            "topped": _f(info, "topped_up_balance"),
+            "granted": _f(info, "granted_balance"),
+            "available": is_available,
+            "currency": info.get("currency", ""),
+        }
+    return {
+        "total": _f(data, "total_balance"),
+        "topped": _f(data, "topped_up_balance"),
+        "granted": _f(data, "granted_balance"),
+        "available": is_available,
+        "currency": data.get("currency", ""),
+    }
+
+
+def load_history():
+    """Lädt den gespeicherten Guthaben-Verlauf."""
+    try:
+        with open(HISTORY_FILE, "r") as f:
+            data = json.load(f)
+            return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def save_history(records):
+    """Speichert den Guthaben-Verlauf (auf MAX_HISTORY begrenzt)."""
+    try:
+        with open(HISTORY_FILE, "w") as f:
+            json.dump(records[-MAX_HISTORY:], f)
+    except Exception:
+        pass
+
+
+def daily_summary(records, tz_name):
+    """Tagesauswertung: Verbrauch = erstes minus letztes Guthaben des Tages."""
+    tz = zoneinfo.ZoneInfo(tz_name)
+    by_day = {}
+    for rec in records:
+        try:
+            ts = datetime.datetime.fromisoformat(rec["ts"])
+        except Exception:
+            continue
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=datetime.timezone.utc)
+        day = ts.astimezone(tz).date()
+        by_day.setdefault(day, []).append(rec.get("total", 0))
+    rows = []
+    for day in sorted(by_day):
+        vals = by_day[day]
+        if len(vals) >= 2:
+            rows.append({
+                "date": day.isoformat(),
+                "start": vals[0],
+                "end": vals[-1],
+                "usage": round(vals[0] - vals[-1], 4),
+            })
+    return rows
+
+
+def write_daily_csv(rows):
+    """Schreibt die Tagesauswertung als CSV."""
+    try:
+        with open(DAILY_CSV_FILE, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["date", "balance_start", "balance_end", "usage"])
+            for r in rows:
+                writer.writerow([r["date"], r["start"], r["end"], r["usage"]])
     except Exception:
         pass
 
@@ -179,14 +303,31 @@ class DeepSeekFiligreeGUI:
     # Zeitzone laden
     self.tz_name = load_timezone()
 
+    # Balance-Status (Thread-sicher)
+    self._balance_lock = threading.Lock()
+    self._fetch_lock = threading.Lock()
+    self._balance_state = {}
+    self._daily_rows = []
+    self._balance_version = 0
+    self._balance_version_seen = -1
+
     # Fensterposition wiederherstellen + Größe in einem Rutsch
     geo = self._read_position()
     self.root.geometry(geo)
     # Beim Schließen Position speichern
     self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
+    # Tabs: Tarif + Realtime
+    self._setup_ttk_style()
+    self.notebook = ttk.Notebook(root)
+    self.notebook.pack(fill=tk.BOTH, expand=True)
+    self.tab_tarif = tk.Frame(self.notebook, bg=COLOR_BG)
+    self.tab_balance = tk.Frame(self.notebook, bg=COLOR_BG)
+    self.notebook.add(self.tab_tarif, text=" Tarif ")
+    self.notebook.add(self.tab_balance, text=" Realtime ")
+
     # Header-Zeile: Badge + TZ-Dropdown
-    self.header_frame = tk.Frame(root, bg=COLOR_BG)
+    self.header_frame = tk.Frame(self.tab_tarif, bg=COLOR_BG)
     self.header_frame.pack(pady=(6, 3), padx=6, fill=tk.X)
 
     self.lbl_badge = tk.Label(
@@ -239,7 +380,7 @@ class DeepSeekFiligreeGUI:
 
     # Countdown-Timer
     self.lbl_timer = tk.Label(
-        root,
+        self.tab_tarif,
         text="00:00:00",
         font=("Segoe UI", 22, "bold"),
         fg=COLOR_TEXT_MAIN,
@@ -249,12 +390,12 @@ class DeepSeekFiligreeGUI:
 
     # Zeitleiste
     self.canvas = tk.Canvas(
-        root, height=55, bg=COLOR_BG, highlightthickness=0
+        self.tab_tarif, height=55, bg=COLOR_BG, highlightthickness=0
     )
     self.canvas.pack(padx=6, fill=tk.X)
 
     # Peak-/Standard-Fenster (zwei Labels für farbliche Unterscheidung)
-    self.win_frame = tk.Frame(root, bg=COLOR_BG)
+    self.win_frame = tk.Frame(self.tab_tarif, bg=COLOR_BG)
     self.win_frame.pack(pady=(0, 0))
 
     self.lbl_peak_label = tk.Label(
@@ -295,7 +436,7 @@ class DeepSeekFiligreeGUI:
 
     # Wochenend-Hinweis (orange)
     self.lbl_weekend_info = tk.Label(
-        root,
+        self.tab_tarif,
         text="Wochenende (Sa + So, Peking): ganztägig Off-Peak ab 23.08.2026",
         font=("Segoe UI", 7),
         fg=COLOR_WEEKEND,
@@ -303,20 +444,40 @@ class DeepSeekFiligreeGUI:
     )
     self.lbl_weekend_info.pack()
 
+    # Realtime-Tab bauen
+    self._build_balance_tab()
+
+    # Tagesauswertung aus vorhandenem Verlauf vorladen
+    self._daily_rows = daily_summary(load_history(), self.tz_name)
+    self._balance_version = 1
+
+    # Abfrage-Thread starten (sofort + alle 5 Minuten)
+    threading.Thread(target=self._poll_worker, daemon=True).start()
+
     self.update_loop()
 
   def _read_position(self):
-    """Liest die letzte Fensterposition, gibt geometrie-String zurück."""
+    """Liest die letzte Fensterposition, erzwingt Mindestgröße für die Tabs."""
+    W, H = 400, 340
     try:
       with open(POS_FILE, "r") as f:
         geo = f.read().strip()
         if "x" in geo and "+" in geo:
-          return geo  # voller String: "360x180+100+200"
+          # "WxH+X+Y" – Größe auf Minimum anheben, Position beibehalten
+          size, _, pos = geo.partition("+")
+          w, _, h = size.partition("x")
+          x, _, y = pos.partition("+")
+          try:
+            w = max(int(w), W)
+            h = max(int(h), H)
+            return f"{w}x{h}+{x}+{y}"
+          except Exception:
+            return f"{W}x{H}"
         # Altes Format: "x,y"
         x, y = geo.split(",")
-        return f"360x180+{x}+{y}"
+        return f"{W}x{H}+{x}+{y}"
     except Exception:
-      return "360x180"
+      return f"{W}x{H}"
 
   def _on_close(self):
     """Speichert die Position und beendet."""
@@ -439,8 +600,238 @@ class DeepSeekFiligreeGUI:
       self.tz_name = tz
       self.tz_btn.config(text=tz)
       save_timezone(tz)
+      # Tagesauswertung in der neuen Zeitzone neu gruppieren
+      self._daily_rows = daily_summary(load_history(), self.tz_name)
+      self._balance_version += 1
+
+  # ------------------------------------------------------------
+  # Realtime-Guthaben (GET /user/balance) + Tagesauswertung
+  # ------------------------------------------------------------
+
+  def _setup_ttk_style(self):
+    """Dunkles Styling für das Notebook."""
+    style = ttk.Style(self.root)
+    try:
+      style.theme_use("clam")
+    except Exception:
+      pass
+    style.configure("TNotebook", background=COLOR_BG, borderwidth=0)
+    style.configure(
+        "TNotebook.Tab",
+        background=COLOR_CARD,
+        foreground=COLOR_TEXT_DIM,
+        padding=(14, 4),
+        borderwidth=0,
+    )
+    style.map(
+        "TNotebook.Tab",
+        background=[("selected", COLOR_CARD_BORDER)],
+        foreground=[("selected", COLOR_TEXT_MAIN)],
+    )
+
+  def _build_balance_tab(self):
+    """Baut den Realtime-Tab (Guthaben + Tagesauswertung)."""
+    tab = self.tab_balance
+
+    self.lbl_balance_status = tk.Label(
+        tab,
+        text="Verbinde mit DeepSeek API…",
+        font=("Segoe UI", 9, "bold"),
+        fg=COLOR_TEXT_DIM,
+        bg=COLOR_BG,
+    )
+    self.lbl_balance_status.pack(pady=(8, 2))
+
+    self.lbl_balance_big = tk.Label(
+        tab,
+        text="–",
+        font=("Segoe UI", 22, "bold"),
+        fg=COLOR_TEXT_MAIN,
+        bg=COLOR_BG,
+    )
+    self.lbl_balance_big.pack()
+
+    self.lbl_balance_sub = tk.Label(
+        tab,
+        text="",
+        font=("Segoe UI", 8),
+        fg=COLOR_TEXT_DIM,
+        bg=COLOR_BG,
+    )
+    self.lbl_balance_sub.pack(pady=(2, 4))
+
+    btn_row = tk.Frame(tab, bg=COLOR_BG)
+    btn_row.pack()
+    self.btn_refresh = tk.Button(
+        btn_row,
+        text="Jetzt aktualisieren",
+        font=("Segoe UI", 8),
+        fg=COLOR_TEXT_MAIN,
+        bg=COLOR_CARD,
+        activebackground=COLOR_CARD_BORDER,
+        activeforeground=COLOR_TEXT_MAIN,
+        relief="flat",
+        borderwidth=0,
+        padx=8,
+        pady=2,
+        command=self._on_refresh,
+    )
+    self.btn_refresh.pack(side=tk.LEFT)
+
+    self.lbl_balance_update = tk.Label(
+        btn_row,
+        text="",
+        font=("Segoe UI", 7),
+        fg=COLOR_TEXT_DIM,
+        bg=COLOR_BG,
+    )
+    self.lbl_balance_update.pack(side=tk.LEFT, padx=(8, 0))
+
+    tk.Label(
+        tab,
+        text="Tagesauswertung (letzte 14 Tage)",
+        font=("Segoe UI", 8, "bold"),
+        fg=COLOR_ACCENT,
+        bg=COLOR_BG,
+    ).pack(pady=(8, 2), anchor="w", padx=10)
+
+    self.txt_daily = tk.Text(
+        tab,
+        height=10,
+        bg=COLOR_CARD,
+        fg=COLOR_TEXT_MAIN,
+        relief="flat",
+        borderwidth=0,
+        font=("Consolas", 8),
+        padx=6,
+        pady=4,
+        state="disabled",
+    )
+    self.txt_daily.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 4))
+
+    self.lbl_csv_path = tk.Label(
+        tab,
+        text="",
+        font=("Segoe UI", 7),
+        fg=COLOR_TEXT_DIM,
+        bg=COLOR_BG,
+    )
+    self.lbl_csv_path.pack(pady=(0, 6))
+
+  def _on_refresh(self):
+    """Manuelles Abrufen des Guthabens (eigener kurzer Thread)."""
+    threading.Thread(target=self._fetch_and_store, daemon=True).start()
+
+  def _poll_worker(self):
+    """Abfrage-Schleife: sofort und danach alle POLL_INTERVAL_S Sekunden."""
+    while True:
+      self._fetch_and_store()
+      time.sleep(POLL_INTERVAL_S)
+
+  def _fetch_and_store(self):
+    """Holt das Guthaben, speichert es im Verlauf, baut die Tagesauswertung."""
+    with self._fetch_lock:
+      api_key = load_api_key()
+      if not api_key:
+        with self._balance_lock:
+          self._balance_state = {
+              "error": "Kein API-Key: DEEPSEEK_API_KEY setzen oder "
+                       "~/.deepseek_api_key anlegen"
+          }
+          self._balance_version += 1
+        return
+      try:
+        data = fetch_balance(api_key)
+        info = parse_balance(data)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        record = {
+            "ts": now.isoformat(),
+            "total": info["total"],
+            "topped": info["topped"],
+            "granted": info["granted"],
+            "available": info["available"],
+            "currency": info["currency"],
+        }
+        history = load_history()
+        history.append(record)
+        save_history(history)
+        rows = daily_summary(history, self.tz_name)
+        write_daily_csv(rows)
+        info["last_update"] = now
+        info["error"] = None
+        with self._balance_lock:
+          self._balance_state = info
+          self._daily_rows = rows
+          self._balance_version += 1
+      except Exception as exc:
+        with self._balance_lock:
+          if self._balance_state.get("total") is None:
+            self._balance_state = {"error": f"API-Fehler: {exc}"}
+          else:
+            self._balance_state["error"] = f"API-Fehler: {exc}"
+          self._balance_version += 1
+
+  def _update_balance_ui(self):
+    """Aktualisiert den Realtime-Tab, wenn neue Daten vorliegen."""
+    with self._balance_lock:
+      state = dict(self._balance_state or {})
+      version = self._balance_version
+      rows = list(self._daily_rows)
+    if version == self._balance_version_seen:
+      return
+    self._balance_version_seen = version
+
+    total = state.get("total")
+    err = state.get("error")
+
+    if total is None:
+      self.lbl_balance_status.config(
+          text="Fehler" if err else "Verbinde mit DeepSeek API…",
+          fg=COLOR_PEAK if err else COLOR_TEXT_DIM,
+      )
+      self.lbl_balance_big.config(text="–")
+      self.lbl_balance_sub.config(text="")
+      if err:
+        self.lbl_balance_update.config(text=err, fg=COLOR_PEAK)
+      else:
+        self.lbl_balance_update.config(text="")
+    else:
+      cur = state.get("currency", "")
+      avail_txt = "verfügbar" if state.get("available", True) else "nicht ausreichend"
+      self.lbl_balance_status.config(text="Guthaben (Realtime)", fg=COLOR_TEXT_DIM)
+      self.lbl_balance_big.config(text=f"{total:.2f} {cur}".strip())
+      self.lbl_balance_sub.config(
+          text=(f"Aufgeladen: {state.get('topped', 0):.2f} {cur}  ·  "
+                f"Geschenkt: {state.get('granted', 0):.2f} {cur}  ·  {avail_txt}")
+      )
+      lu = state.get("last_update")
+      txt = ""
+      if lu:
+        lu_local = lu.astimezone(zoneinfo.ZoneInfo(self.tz_name))
+        txt = f"Stand: {lu_local.strftime('%d.%m.%Y %H:%M:%S')}"
+      if err:
+        txt = (txt + "  ·  " if txt else "") + err
+      self.lbl_balance_update.config(
+          text=txt, fg=COLOR_PEAK if err else COLOR_TEXT_DIM
+      )
+
+    self.txt_daily.config(state="normal")
+    self.txt_daily.delete("1.0", tk.END)
+    if rows:
+      lines = [f"{'Datum':<12}{'Verbrauch':>14}{'Endstand':>14}"]
+      for r in rows[-14:]:
+        lines.append(f"{r['date']:<12}{r['usage']:>14.4f}{r['end']:>14.4f}")
+      self.txt_daily.insert(tk.END, "\n".join(lines))
+    else:
+      self.txt_daily.insert(
+          tk.END,
+          "Noch keine Daten – die Auswertung baut sich mit jeder Abfrage auf.",
+      )
+    self.txt_daily.config(state="disabled")
+    self.lbl_csv_path.config(text=f"CSV: {DAILY_CSV_FILE}")
 
   def update_loop(self):
+    self._update_balance_ui()
     now_utc, now_local, offset_hours = get_times(self.tz_name)
 
     status_text, sec_left, bg_color, status_key = calculate_status(now_utc)
