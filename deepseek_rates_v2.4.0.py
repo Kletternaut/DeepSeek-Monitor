@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-DeepSeek V4 Rates + Realtime Balance + Analytics
+DeepSeek Monitor + Realtime Balance + Analytics
 
 Verbesserungen gegenüber der ursprünglichen Version:
 - Tarifberechnung ohne unnötige 9-Tage-Neuberechnung pro Sekunde
@@ -63,7 +63,7 @@ from typing import Any
 # ============================================================
 
 UTC = dt.timezone.utc
-APP_NAME = "DeepSeek V4 Rates"
+APP_NAME = "DeepSeek Monitor"
 APP_VERSION = "2.4.0"
 
 # Tarifannahme aus der ursprünglichen Version
@@ -199,7 +199,7 @@ BASE_TRANSLATIONS = {
         "api_401":"API-Key ungültig oder abgelaufen.",
         "api_403":"Zugriff auf die DeepSeek API verweigert.",
         "api_429":"Zu viele API-Anfragen – bitte später erneut versuchen.",
-        "poll_interval":"Balance-Abfrage", "poll_interval_hint":"Sekunden (mind. 20)", "apply":"Übernehmen",
+        "poll_interval":"Balance-Abfrage", "poll_interval_hint":"Sekunden (mind. 20)", "apply":"Übernehmen", "saved":"Gespeichert ✓",
         "data_source":"Datenquelle", "local_proxy":"Lokal (Proxy/SQLite)", "influxdb":"InfluxDB (zentral)",
         "influx_url":"URL", "influx_token":"Token", "influx_org":"Organisation", "influx_bucket":"Bucket",
     },
@@ -235,7 +235,7 @@ BASE_TRANSLATIONS = {
         "api_401":"API key invalid or expired.",
         "api_403":"DeepSeek API access denied.",
         "api_429":"Too many API requests – please try again later.",
-        "poll_interval":"Balance polling", "poll_interval_hint":"seconds (min. 20)", "apply":"Apply",
+        "poll_interval":"Balance polling", "poll_interval_hint":"seconds (min. 20)", "apply":"Apply", "saved":"Saved ✓",
         "data_source":"Data source", "local_proxy":"Local (proxy/SQLite)", "influxdb":"InfluxDB (central)",
         "influx_url":"URL", "influx_token":"Token", "influx_org":"Organization", "influx_bucket":"Bucket",
     },
@@ -4224,6 +4224,8 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         if settings_window is not None:
             settings_window.focus_set()
 
+        messagebox.showinfo(self.t("saved"), self.t("saved"))
+
     def _close_settings_window(self) -> None:
         win = getattr(self, "_settings_window", None)
         if win is None:
@@ -4311,7 +4313,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
 
         tk.Label(
             title_box,
-            text=f"DeepSeek V4 Rates · v{APP_VERSION}",
+            text=f"DeepSeek Monitor · v{APP_VERSION}",
             font=("Segoe UI", 7),
             fg=COLOR_TEXT_DIM,
             bg=COLOR_CARD,
@@ -4564,6 +4566,8 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
             if self._cost_window is not None:
                 self._cost_rendered_version = -1
                 self._update_cost_window(force=True)
+
+            messagebox.showinfo(self.t("saved"), self.t("saved"))
 
         apply_influx_btn = tk.Button(
             source,
