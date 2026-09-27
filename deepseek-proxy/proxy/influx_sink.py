@@ -76,8 +76,7 @@ class InfluxSink:
             self._client, self._write_api = self._connect()
         else:
             logger.warning(
-                "InfluxSink disabled (incomplete configuration: "
-                "url/token/org/bucket missing)."
+                "InfluxSink disabled (incomplete configuration: " "url/token/org/bucket missing)."
             )
 
     # ------------------------------------------------------------- connection

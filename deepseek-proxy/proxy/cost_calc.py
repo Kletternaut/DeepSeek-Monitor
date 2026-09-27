@@ -29,15 +29,15 @@ _COST_DECIMALS = 8
 def _cache_token_split(usage: TokenUsage) -> tuple[int, int]:
     """Split into ``(cache_miss_tokens, cache_hit_tokens)``.
 
-    IMPORTANT (DeepSeek-Anthropic peculiarity): unlike standard Anthropic,
-    ``input_tokens`` here is NOT the total input, but only the NON-cached share
-    (cache MISS). ``cache_read_input_tokens`` is the cached share (cache HIT).
-    Both are additive, not nested.
+        IMPORTANT (DeepSeek-Anthropic peculiarity): unlike standard Anthropic,
+        ``input_tokens`` here is NOT the total input, but only the NON-cached share
+        (cache MISS). ``cache_read_input_tokens`` is the cached share (cache HIT).
+        Both are additive, not nested.
 
-    Evidence (real data): ``cache_read_input_tokens`` (≈181k) can clearly
-exceed ``input_tokens`` (≈8k) -- only possible if ``input_tokens`` is not the
-total. ``cache_creation_input_tokens`` is observed to always be 0 for DeepSeek
-(included in ``input_tokens``).
+        Evidence (real data): ``cache_read_input_tokens`` (≈181k) can clearly
+    exceed ``input_tokens`` (≈8k) -- only possible if ``input_tokens`` is not the
+    total. ``cache_creation_input_tokens`` is observed to always be 0 for DeepSeek
+    (included in ``input_tokens``).
     """
     miss_tokens = max(0, int(usage.input_tokens))
     hit_tokens = max(0, int(usage.cache_read_input_tokens))

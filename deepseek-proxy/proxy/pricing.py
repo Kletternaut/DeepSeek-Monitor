@@ -80,7 +80,7 @@ def _deep_copy_default() -> dict:
     return copy.deepcopy(DEFAULT_PRICING)
 
 
-def load_pricing(storage: "Storage | None" = None) -> dict:
+def load_pricing(storage: Storage | None = None) -> dict:
     """Load the price table from ``storage`` (JSON) or return the defaults.
 
     Parameters:
@@ -108,7 +108,7 @@ def load_pricing(storage: "Storage | None" = None) -> dict:
     return parsed
 
 
-def save_pricing(storage: "Storage", pricing: dict) -> None:
+def save_pricing(storage: Storage, pricing: dict) -> None:
     """Persist ``pricing`` as a JSON string under the settings key ``pricing``."""
     storage.set_setting(PRICING_SETTING_KEY, json.dumps(pricing))
 
@@ -134,12 +134,12 @@ def normalize_model(model: str) -> str:
 def is_peak(timestamp_iso: str) -> bool:
     """Check whether the point in time lies in the peak zone.
 
-    The timestamp is parsed via :func:`datetime.fromisoformat` and converted to
-    UTC. A timestamp without offset is assumed to be UTC. On a parse error or
-    ``None``, ``False`` (off-peak) is returned.
+        The timestamp is parsed via :func:`datetime.fromisoformat` and converted to
+        UTC. A timestamp without offset is assumed to be UTC. On a parse error or
+        ``None``, ``False`` (off-peak) is returned.
 
-    A point in time that falls on Saturday or Sunday in Beijing time is always
-off-peak. Chinese public holidays are not considered.
+        A point in time that falls on Saturday or Sunday in Beijing time is always
+    off-peak. Chinese public holidays are not considered.
     """
     if not timestamp_iso:
         return False
@@ -162,10 +162,7 @@ off-peak. Chinese public holidays are not considered.
         return False
 
     minute_of_day = utc_dt.hour * 60 + utc_dt.minute
-    for start, end in _PEAK_WINDOWS_UTC:
-        if start <= minute_of_day < end:
-            return True
-    return False
+    return any(start <= minute_of_day < end for start, end in _PEAK_WINDOWS_UTC)
 
 
 def _zone_key(timestamp_iso: str) -> str:
@@ -198,9 +195,7 @@ def get_tariff(
         tariff = model_entry.get("off_peak")
     if not isinstance(tariff, dict):
         fallback_entry = table.get("deepseek-flash")
-        if isinstance(fallback_entry, dict) and isinstance(
-            fallback_entry.get("off_peak"), dict
-        ):
+        if isinstance(fallback_entry, dict) and isinstance(fallback_entry.get("off_peak"), dict):
             return dict(fallback_entry["off_peak"])
         return dict(_FALLBACK_TARIFF)
 
@@ -223,15 +218,15 @@ def _extract_row_amounts(text: str, start: int, end: int) -> list[float]:
 def fetch_latest_pricing() -> dict | None:
     """Attempt to load the current price table from the DeepSeek docs.
 
-    Best effort: the docs page is HTML and its layout can change. It is assumed
-    that six ``$`` amounts appear per model in the order ``cache_hit(off),
-    cache_miss(off), output(off), cache_hit(peak), cache_miss(peak),
-    output(peak)``. Additionally, ``peak >= off_peak`` must hold per category.
+        Best effort: the docs page is HTML and its layout can change. It is assumed
+        that six ``$`` amounts appear per model in the order ``cache_hit(off),
+        cache_miss(off), output(off), cache_hit(peak), cache_miss(peak),
+        output(peak)``. Additionally, ``peak >= off_peak`` must hold per category.
 
-    Returns:
-        The parsed table in the :data:`DEFAULT_PRICING` format, or ``None`` if
-        no safe result could be extracted. Values are NEVER guessed. The caller
-decides (with confirmation) whether to adopt the result.
+        Returns:
+            The parsed table in the :data:`DEFAULT_PRICING` format, or ``None`` if
+            no safe result could be extracted. Values are NEVER guessed. The caller
+    decides (with confirmation) whether to adopt the result.
     """
     from urllib.request import Request, urlopen  # locally: only load on demand
 
@@ -277,8 +272,8 @@ decides (with confirmation) whether to adopt the result.
         return None
 
     def _build(amounts: list[float]) -> dict | None:
-        off = dict(zip(_ROW_FIELDS, amounts[:3]))
-        peak = dict(zip(_ROW_FIELDS, amounts[3:]))
+        off = dict(zip(_ROW_FIELDS, amounts[:3], strict=True))
+        peak = dict(zip(_ROW_FIELDS, amounts[3:], strict=True))
         for field in _ROW_FIELDS:
             if peak[field] < off[field]:
                 return None

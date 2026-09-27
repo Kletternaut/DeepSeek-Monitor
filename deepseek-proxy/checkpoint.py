@@ -49,7 +49,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 def read_key() -> str:
-    with open(KEY_FILE, "r", encoding="utf-8") as f:
+    with open(KEY_FILE, encoding="utf-8") as f:
         return f.read().strip()
 
 
@@ -85,7 +85,7 @@ def _load_checkpoints() -> dict:
     if not os.path.exists(CHECKPOINT_FILE):
         return {}
     try:
-        with open(CHECKPOINT_FILE, "r", encoding="utf-8") as f:
+        with open(CHECKPOINT_FILE, encoding="utf-8") as f:
             return json.load(f)
     except (OSError, json.JSONDecodeError):
         return {}
@@ -134,8 +134,10 @@ def cmd_list() -> None:
     for label, cp in cps.items():
         u = cp.get("usage_page_tokens")
         ustr = f"{u:,}" if u is not None else "-"
-        print(f"  {label}: {cp['timestamp']} | DB-tokens={cp['total_tokens']:,} "
-              f"| usage-page={ustr} | ${cp['cost_usd']:.6f}")
+        print(
+            f"  {label}: {cp['timestamp']} | DB-tokens={cp['total_tokens']:,} "
+            f"| usage-page={ustr} | ${cp['cost_usd']:.6f}"
+        )
 
 
 def cmd_compare(label: str, usage_tokens: int | None) -> None:
@@ -144,7 +146,6 @@ def cmd_compare(label: str, usage_tokens: int | None) -> None:
         print(f"Checkpoint '{label}' not found. Available: {list(cps)}")
         return 1
     cp = cps[label]
-    snap = _db_snapshot()
 
     # Delta only for events AFTER the checkpoint (id > max_id).
     from proxy.cost_calc import calc_usage_cost
@@ -158,7 +159,10 @@ def cmd_compare(label: str, usage_tokens: int | None) -> None:
 
     d = {
         "requests": len(new_rows),
-        "input": 0, "cache_read": 0, "output": 0, "cost_usd": 0.0,
+        "input": 0,
+        "cache_read": 0,
+        "output": 0,
+        "cost_usd": 0.0,
     }
     for r in new_rows:
         u = row_to_usage(r)
@@ -186,8 +190,7 @@ def cmd_compare(label: str, usage_tokens: int | None) -> None:
         print(f"  Usage delta:        {usage_delta:,}")
         print(f"  Proxy DB delta:     {d_tokens:,}")
         diff = usage_delta - d_tokens
-        print(f"  Difference:         {diff:,}  "
-              f"({'match' if diff == 0 else 'mismatch'})")
+        print(f"  Difference:         {diff:,}  " f"({'match' if diff == 0 else 'mismatch'})")
     elif usage_tokens is not None and cp.get("usage_page_tokens") is None:
         print()
         print("  Note: checkpoint has no usage-page tokens stored.")
@@ -274,13 +277,17 @@ def cmd_cachetest(words: int) -> None:
 
     print("\n=== EVALUATION ===")
     hit_detected = r2["cache_read"] > r1["cache_read"]
-    print(f"Cache HIT detected: {'YES' if hit_detected else 'NO'} "
-          f"(request 2 cache_read={r2['cache_read']:,} vs request 1 "
-          f"cache_read={r1['cache_read']:,})")
+    print(
+        f"Cache HIT detected: {'YES' if hit_detected else 'NO'} "
+        f"(request 2 cache_read={r2['cache_read']:,} vs request 1 "
+        f"cache_read={r1['cache_read']:,})"
+    )
     print(f"Cost saving via cache: ${r1['cost_usd'] - r2['cost_usd']:.8f}")
     print()
-    print("=> Compare: (input+cache-read+output) of the two requests with the "
-          "usage-page delta (read before/after).")
+    print(
+        "=> Compare: (input+cache-read+output) of the two requests with the "
+        "usage-page delta (read before/after)."
+    )
 
 
 def main() -> int:
@@ -294,19 +301,26 @@ def main() -> int:
 
     p_save = sub.add_parser("save", help="Save a checkpoint")
     p_save.add_argument("label")
-    p_save.add_argument("--usage", type=_usage_int, default=None,
-                        help="current total token count from the usage page")
+    p_save.add_argument(
+        "--usage",
+        type=_usage_int,
+        default=None,
+        help="current total token count from the usage page",
+    )
 
     sub.add_parser("list", help="List checkpoints")
 
     p_cmp = sub.add_parser("compare", help="Delta since checkpoint")
     p_cmp.add_argument("label")
-    p_cmp.add_argument("--usage", type=_usage_int, default=None,
-                       help="current total token count from the usage page")
+    p_cmp.add_argument(
+        "--usage",
+        type=_usage_int,
+        default=None,
+        help="current total token count from the usage page",
+    )
 
     p_ct = sub.add_parser("cachetest", help="Cache MISS/HIT test")
-    p_ct.add_argument("--words", type=int, default=2000,
-                      help="prompt size in words (default 2000)")
+    p_ct.add_argument("--words", type=int, default=2000, help="prompt size in words (default 2000)")
 
     args = parser.parse_args()
 

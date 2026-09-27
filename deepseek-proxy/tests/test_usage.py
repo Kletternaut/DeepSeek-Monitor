@@ -25,7 +25,7 @@ def _parse_stream(payload: bytes):
     parser = SSEParser(on_event=lambda n, d: events.append((n, d)))
     parser.feed(payload)
     result = TokenUsage()
-    for name, data in events:
+    for _name, data in events:
         if data is None:
             continue
         obj = json.loads(data)  # invalid JSON can surface here
@@ -49,9 +49,7 @@ class TestFinalizeUsage:
 
     def test_includes_cache_read(self):
         # DeepSeek: input = miss, cache_read = hit (additiv)
-        u = TokenUsage(
-            input_tokens=8204, cache_read_input_tokens=181888, output_tokens=3180
-        )
+        u = TokenUsage(input_tokens=8204, cache_read_input_tokens=181888, output_tokens=3180)
         finalize_usage(u)
         assert u.total_tokens == 8204 + 181888 + 3180
 
@@ -162,10 +160,10 @@ class TestFullPipeline:
     def test_stream_with_all_events(self):
         """Gesamter Anthropic-Stream, inkl. keep-alive, durch den echten Parser."""
         payload = (
-            b'event: message_start\n'
+            b"event: message_start\n"
             b'data: {"type":"message_start","message":{"id":"m1","model":"deepseek-flash"},'
             b'"usage":{"input_tokens":55,"output_tokens":1}}\n\n'
-            b': keep-alive\n\n'
+            b": keep-alive\n\n"
             b'event: content_block_start\ndata: {"type":"content_block_start"}\n\n'
             b'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\n\n'
             b'event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":12}}\n\n'
@@ -179,7 +177,9 @@ class TestFullPipeline:
 
     def test_json_split_across_chunks(self):
         """Case 5: JSON spread over several chunks — through the real parser."""
-        full = b'event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":99}}\n\n'
+        full = (
+            b'event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":99}}\n\n'
+        )
         events = []
         parser = SSEParser(on_event=lambda n, d: events.append((n, d)))
         # beliebige Chunk-Grenzen, mitten im JSON
@@ -192,7 +192,7 @@ class TestFullPipeline:
 
     def test_invalid_json_does_not_crash_parser(self):
         """Case 9: invalid JSON must not crash the parser (only the consumer)."""
-        payload = b'event: message_delta\ndata: {invalid json!!!}\n\n'
+        payload = b"event: message_delta\ndata: {invalid json!!!}\n\n"
         events = []
         parser = SSEParser(on_event=lambda n, d: events.append((n, d)))
         parser.feed(payload)  # parser returns the string unchanged

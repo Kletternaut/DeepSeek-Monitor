@@ -16,7 +16,7 @@ URL = "https://api.deepseek.com/anthropic/v1/messages"
 
 
 def main() -> int:
-    with open(KEY_FILE, "r", encoding="utf-8") as f:
+    with open(KEY_FILE, encoding="utf-8") as f:
         api_key = f.read().strip()
 
     body = {
@@ -59,7 +59,9 @@ def main() -> int:
                 continue
             if isinstance(obj, dict) and isinstance(obj.get("usage"), dict):
                 found = True
-                print(f"  type={obj.get('type')!r}  usage={json.dumps(obj['usage'], sort_keys=True)}")
+                print(
+                    f"  type={obj.get('type')!r}  usage={json.dumps(obj['usage'], sort_keys=True)}"
+                )
         if not found:
             print("  (kein 'usage'-Objekt gefunden)")
     return 0

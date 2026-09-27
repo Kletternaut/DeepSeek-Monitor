@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sqlite3
 import sys
 import time
 import urllib.request
@@ -31,7 +30,7 @@ DB_PATH = os.path.expanduser("~/.local/state/deepseek/usage.db")
 
 
 def read_key() -> str:
-    with open(KEY_FILE, "r", encoding="utf-8") as f:
+    with open(KEY_FILE, encoding="utf-8") as f:
         return f.read().strip()
 
 
@@ -89,10 +88,7 @@ def send_controlled_request() -> dict:
     from proxy.storage import Storage, row_to_usage
 
     # Unique prompt -> guarantees cache miss = input, no cache hit.
-    prompt = (
-        f"Validation test at {time.strftime('%H:%M:%S')}. "
-        "Reply only with the word: OK"
-    )
+    prompt = f"Validation test at {time.strftime('%H:%M:%S')}. " "Reply only with the word: OK"
     body = {
         "model": "deepseek-flash",
         "max_tokens": 16,
@@ -147,8 +143,7 @@ def main() -> int:
         print(f"  Total tokens:        {t['input'] + t['cache_read'] + t['output']:,}")
         print(f"  Cost (calculated):   ${t['cost_usd']:.6f}")
         print()
-        print("=> Compare 'total tokens' with the delta number on "
-              "platform.deepseek.com/usage")
+        print("=> Compare 'total tokens' with the delta number on " "platform.deepseek.com/usage")
         print("=> Compare 'cost' with the balance delta (note USD vs. currency)")
 
     elif args.request:
@@ -170,10 +165,11 @@ def main() -> int:
         print(f"  Output:        {r['output']:,}")
         print(f"  Total tokens:  {r['input'] + r['cache_read'] + r['output']:,}")
         print(f"  Cost:          ${r['cost_usd']:.8f}")
-        print(f"Proxy events after: {t_after['requests']} "
-              f"(+{t_after['requests'] - t_before['requests']})")
-        print(f"Balance: {bal_after:.2f} {cur} "
-              f"(delta: {bal_before - bal_after:.2f} {cur})")
+        print(
+            f"Proxy events after: {t_after['requests']} "
+            f"(+{t_after['requests'] - t_before['requests']})"
+        )
+        print(f"Balance: {bal_after:.2f} {cur} " f"(delta: {bal_before - bal_after:.2f} {cur})")
         print()
         print("=> Compare the token delta on the usage page with 'total tokens'.")
         print("=> Single-request costs are usually invisible in the balance (2 decimals).")

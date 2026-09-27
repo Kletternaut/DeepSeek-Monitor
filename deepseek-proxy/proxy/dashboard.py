@@ -49,7 +49,9 @@ def _window_start(days: int) -> str:
     return start.isoformat(timespec="seconds")
 
 
-def _resolve_fingerprint(storage: Storage, fingerprint: str | None, label: str | None) -> str | None:
+def _resolve_fingerprint(
+    storage: Storage, fingerprint: str | None, label: str | None
+) -> str | None:
     """Resolve ``label`` (if given) to a fingerprint.
 
     An explicitly set ``fingerprint`` always takes precedence. If only ``label``
@@ -240,11 +242,11 @@ def add_dashboard_routes(app: FastAPI, storage: Storage) -> None:
     async def api_refresh_pricing() -> JSONResponse:
         """Load the prices from the DeepSeek docs and overwrite the table.
 
-        Important: the client-side confirmation (``confirm()``) happens in the
-        UI **before** the POST. This endpoint immediately overwrites the stored
-table when a result is available -- there is no further prompt here. If
-        :func:`fetch_latest_pricing` returns ``None`` (no safe result), nothing
-        is overwritten.
+                Important: the client-side confirmation (``confirm()``) happens in the
+                UI **before** the POST. This endpoint immediately overwrites the stored
+        table when a result is available -- there is no further prompt here. If
+                :func:`fetch_latest_pricing` returns ``None`` (no safe result), nothing
+                is overwritten.
         """
         result = fetch_latest_pricing()
         if result is None:
@@ -259,7 +261,7 @@ table when a result is available -- there is no further prompt here. If
 
 
 # ------------------------------------------------------------------------- HTML
-_DASHBOARD_HTML = """<!DOCTYPE html>
+_DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">

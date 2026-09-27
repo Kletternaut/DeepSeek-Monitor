@@ -39,7 +39,8 @@ import inspect
 import json
 import logging
 import threading
-from typing import Any, Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
+from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
@@ -88,8 +89,7 @@ UsageCallback = Callable[[TokenUsage], Any]
 def _default_usage_callback(usage: TokenUsage) -> None:
     """Default ``usage_callback``: write the usage only to the log."""
     usage_logger.info(
-        "usage in=%d out=%d cache_read=%d cache_write=%d total=%d model=%s "
-        "request_id=%s key=%s",
+        "usage in=%d out=%d cache_read=%d cache_write=%d total=%d model=%s " "request_id=%s key=%s",
         usage.input_tokens,
         usage.output_tokens,
         usage.cache_read_input_tokens,
@@ -255,9 +255,7 @@ class DeepSeekProxyServer:
         self._thread.start()
 
         if wait and not self._ready.wait(timeout=timeout):
-            raise RuntimeError(
-                f"Proxy server did not become ready within {timeout:.1f}s"
-            )
+            raise RuntimeError(f"Proxy server did not become ready within {timeout:.1f}s")
 
         logger.info("Proxy running at %s -> %s", self.base_url, self.upstream_url)
 

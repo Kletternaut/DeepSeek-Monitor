@@ -14,16 +14,14 @@ from unittest import mock
 
 from proxy.usage import TokenUsage
 
-
 # ---------------------------------------------------------------------------
 # Flux-annotated-CSV-Parser + Event-Mapping
 # ---------------------------------------------------------------------------
 
+
 def _load_read_helpers() -> tuple:
     """Load the pure read functions from deepseek_monitor.analytics."""
-    repo_root = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "..")
-    )
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
 
@@ -104,6 +102,7 @@ def test_flux_row_to_event_handles_missing_numeric():
 # InfluxSink (Schreiben) -- gemockter Client
 # ---------------------------------------------------------------------------
 
+
 def _mk_usage() -> TokenUsage:
     return TokenUsage(
         timestamp="2026-09-25T16:47:30+02:00",
@@ -129,9 +128,7 @@ def test_influx_sink_disabled_without_config():
 def test_influx_sink_connect_lazy_import_missing():
     from proxy.influx_sink import InfluxSink
 
-    sink = InfluxSink(
-        url="http://x:8086", token="t", org="o", bucket="b", host_name="h"
-    )
+    sink = InfluxSink(url="http://x:8086", token="t", org="o", bucket="b", host_name="h")
     # influxdb-client ist im Test ggf. nicht installiert -> sink deaktiviert,
     # write darf trotzdem nicht werfen.
     sink.write(_mk_usage())  # best effort, keine Exception
@@ -140,9 +137,7 @@ def test_influx_sink_connect_lazy_import_missing():
 def test_influx_sink_to_point_with_mocked_client():
     from proxy.influx_sink import InfluxSink
 
-    sink = InfluxSink(
-        url="http://x:8086", token="t", org="o", bucket="b", host_name="raspi5"
-    )
+    sink = InfluxSink(url="http://x:8086", token="t", org="o", bucket="b", host_name="raspi5")
     sink._enabled = False  # no real client needed
 
     # ``_to_point`` importiert ``Point`` lazy aus ``influxdb_client`` und

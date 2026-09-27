@@ -4,10 +4,6 @@ These tests must NOT bypass the real parser — exclusively
 :class:`proxy.sse.SSEParser` is used and observed via its callback.
 """
 
-import json
-
-import pytest
-
 from proxy.sse import SSEParser
 
 
@@ -20,16 +16,13 @@ def _feed_collect(chunks, on_event):
 
 
 def _chunks_bytewise(data: bytes):
-    return [data[i:i + 1] for i in range(len(data))]
+    return [data[i : i + 1] for i in range(len(data))]
 
 
 class TestParser:
     def test_single_event_single_chunk(self):
         events = []
-        payload = (
-            b'event: message_start\n'
-            b'data: {"type":"message_start"}\n\n'
-        )
+        payload = b"event: message_start\n" b'data: {"type":"message_start"}\n\n'
         _feed_collect([payload], lambda n, d: events.append((n, d)))
         assert events == [("message_start", '{"type":"message_start"}')]
 
@@ -53,7 +46,9 @@ class TestParser:
         )
         _feed_collect([payload], lambda n, d: events.append((n, d)))
         assert [n for n, _ in events] == [
-            "message_start", "content_block_delta", "content_block_delta"
+            "message_start",
+            "content_block_delta",
+            "content_block_delta",
         ]
 
     def test_utf8_char_split_across_chunks(self):
@@ -63,11 +58,11 @@ class TestParser:
         text = 'event: message_delta\ndata: {"text":"Grüße"}\n\n'
         raw = text.encode("utf-8")
         # Find the boundary in the middle of "ü"
-        u_pos = raw.index("ü".encode("utf-8"))
-        chunks = [raw[:u_pos + 1], raw[u_pos + 1:]]
+        u_pos = raw.index("ü".encode())
+        chunks = [raw[: u_pos + 1], raw[u_pos + 1 :]]
         _feed_collect(chunks, lambda n, d: events.append((n, d)))
         assert len(events) == 1
-        assert 'Grüße' in events[0][1]
+        assert "Grüße" in events[0][1]
 
     def test_bytewise_feed(self):
         """Stress test: feed every byte individually."""
@@ -80,9 +75,9 @@ class TestParser:
         """Case 7: a `: keep-alive` comment does not disturb the parser."""
         events = []
         payload = (
-            b': keep-alive\n\n'
+            b": keep-alive\n\n"
             b'event: content_block_delta\ndata: {"delta":"x"}\n\n'
-            b': keep-alive\n\n'
+            b": keep-alive\n\n"
         )
         _feed_collect([payload], lambda n, d: events.append((n, d)))
         assert events == [("content_block_delta", '{"delta":"x"}')]
@@ -101,13 +96,13 @@ class TestParser:
 
     def test_multiline_data_joined(self):
         events = []
-        payload = b'event: msg\ndata: line1\ndata: line2\n\n'
+        payload = b"event: msg\ndata: line1\ndata: line2\n\n"
         _feed_collect([payload], lambda n, d: events.append((n, d)))
         assert events == [("msg", "line1\nline2")]
 
     def test_event_without_data(self):
         events = []
-        payload = b'event: ping\n\n'
+        payload = b"event: ping\n\n"
         _feed_collect([payload], lambda n, d: events.append((n, d)))
         assert events == [("ping", None)]
 
@@ -115,13 +110,13 @@ class TestParser:
         """Fall 10: vorzeitiger Abbruch (kein finales \\n\\n) — kein Crash."""
         events = []
         payload = b'event: message_delta\ndata: {"unfinished"'
-        parser = _feed_collect([payload], lambda n, d: events.append((n, d)))
+        _feed_collect([payload], lambda n, d: events.append((n, d)))
         assert events == []  # incomplete event is not dispatched
         # kein Exception — Test erreicht diese Zeile nur, wenn nichts gecrasht ist
 
     def test_callback_error_does_not_crash(self):
         """Fall 12: Callback-Fehler brechen den Parser nicht ab."""
-        payload = b'event: a\ndata: {}\n\nevent: b\ndata: {}\n\n'
+        payload = b"event: a\ndata: {}\n\nevent: b\ndata: {}\n\n"
         seen = []
         state = {"n": 0}
 
@@ -139,7 +134,7 @@ class TestParser:
     def test_reset_clears_state(self):
         events = []
         parser = SSEParser(on_event=lambda n, d: events.append((n, d)))
-        parser.feed(b'event: a\ndata: partial')
+        parser.feed(b"event: a\ndata: partial")
         parser.reset()
-        parser.feed(b'event: b\ndata: {}\n\n')
+        parser.feed(b"event: b\ndata: {}\n\n")
         assert events == [("b", "{}")]

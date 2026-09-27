@@ -128,18 +128,16 @@ def extract_usage_from_event(event: dict) -> TokenUsage | None:
 def finalize_usage(usage: TokenUsage) -> TokenUsage:
     """Compute ``total_tokens`` as a fallback if it was not in the stream.
 
-    DeepSeek does not deliver ``total_tokens`` in the Anthropic stream. Since
-    ``input_tokens`` reports the cache-MISS share and ``cache_read_input_tokens``
-    the cache-HIT share for DeepSeek (additive), the following holds:
-    ``total_tokens = input_tokens + cache_read_input_tokens + output_tokens``.
+        DeepSeek does not deliver ``total_tokens`` in the Anthropic stream. Since
+        ``input_tokens`` reports the cache-MISS share and ``cache_read_input_tokens``
+        the cache-HIT share for DeepSeek (additive), the following holds:
+        ``total_tokens = input_tokens + cache_read_input_tokens + output_tokens``.
 
-    It is only overwritten when ``total_tokens`` is still ``0`` -- if DeepSeek
-delivers its own value in the future, it is preserved.
+        It is only overwritten when ``total_tokens`` is still ``0`` -- if DeepSeek
+    delivers its own value in the future, it is preserved.
     """
     if usage.total_tokens == 0:
         usage.total_tokens = (
-            usage.input_tokens
-            + usage.cache_read_input_tokens
-            + usage.output_tokens
+            usage.input_tokens + usage.cache_read_input_tokens + usage.output_tokens
         )
     return usage

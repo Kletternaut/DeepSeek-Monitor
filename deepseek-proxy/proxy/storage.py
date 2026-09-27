@@ -59,14 +59,14 @@ _SCHEMA = (
 def row_to_usage(row: dict) -> TokenUsage:
     """Map a storage row dict to a :class:`TokenUsage`.
 
-    The DB column names partly differ from the dataclass field names:
+        The DB column names partly differ from the dataclass field names:
 
-    * ``cache_creation_tokens``   → ``cache_creation_input_tokens``
-    * ``cache_read_tokens``       → ``cache_read_input_tokens``
-    * ``api_key_fingerprint``     → ``api_key_fingerprint`` (identical)
+        * ``cache_creation_tokens``   → ``cache_creation_input_tokens``
+        * ``cache_read_tokens``       → ``cache_read_input_tokens``
+        * ``api_key_fingerprint``     → ``api_key_fingerprint`` (identical)
 
-    ``raw_usage`` is stored as a JSON string in the DB and is parsed (best
-effort) via :func:`json.loads`; on errors the field is an empty dict.
+        ``raw_usage`` is stored as a JSON string in the DB and is parsed (best
+    effort) via :func:`json.loads`; on errors the field is an empty dict.
     """
 
     def _int(key: str) -> int:
@@ -244,14 +244,12 @@ class Storage:
     def get_distinct_fingerprints(self) -> list[str]:
         """Return all API key fingerprints seen so far."""
         with self._connect() as conn:
-            cursor = conn.execute(
-                """
+            cursor = conn.execute("""
                 SELECT DISTINCT api_key_fingerprint
                 FROM usage_events
                 WHERE api_key_fingerprint != ''
                 ORDER BY api_key_fingerprint
-                """
-            )
+                """)
             return [row["api_key_fingerprint"] for row in cursor.fetchall()]
 
     # ----------------------------------------------------------------- labels

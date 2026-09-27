@@ -23,6 +23,7 @@ Public symbols:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import tkinter as tk
 from datetime import datetime, timedelta
@@ -221,27 +222,17 @@ class UsageDetailApp:
         style.configure("TFrame", background=_BG)
         style.configure("Panel.TFrame", background=_PANEL)
         style.configure("Card.TFrame", background=_PANEL2)
-        style.configure(
-            "TLabel", background=_BG, foreground=_FG, font=("TkDefaultFont", 10)
-        )
-        style.configure(
-            "Panel.TLabel", background=_PANEL, foreground=_FG
-        )
+        style.configure("TLabel", background=_BG, foreground=_FG, font=("TkDefaultFont", 10))
+        style.configure("Panel.TLabel", background=_PANEL, foreground=_FG)
         style.configure(
             "Title.TLabel",
             background=_BG,
             foreground=_FG,
             font=("TkDefaultFont", 15, "bold"),
         )
-        style.configure(
-            "Muted.TLabel", background=_BG, foreground=_MUTED
-        )
-        style.configure(
-            "PanelMuted.TLabel", background=_PANEL, foreground=_MUTED
-        )
-        style.configure(
-            "CardLabel.TLabel", background=_PANEL2, foreground=_MUTED
-        )
+        style.configure("Muted.TLabel", background=_BG, foreground=_MUTED)
+        style.configure("PanelMuted.TLabel", background=_PANEL, foreground=_MUTED)
+        style.configure("CardLabel.TLabel", background=_PANEL2, foreground=_MUTED)
         style.configure(
             "CardValue.TLabel",
             background=_PANEL2,
@@ -267,9 +258,7 @@ class UsageDetailApp:
             foreground=_FG,
             bordercolor=_BORDER,
         )
-        style.configure(
-            "Treeview.Heading", background=_PANEL, foreground=_MUTED
-        )
+        style.configure("Treeview.Heading", background=_PANEL, foreground=_MUTED)
         style.map("Treeview", background=[("selected", _ACCENT)])
 
     # --------------------------------------------------------------- widgets
@@ -306,34 +295,36 @@ class UsageDetailApp:
             self._make_card(kpi, idx, title, self._kpi_vars[key], "CardValue.TLabel")
 
         # Peak vs. Off-Peak ----------------------------------------------
-        ttk.Label(body, text="Peak vs. Off-Peak", style="TLabel").pack(
-            anchor="w", pady=(16, 6)
-        )
+        ttk.Label(body, text="Peak vs. Off-Peak", style="TLabel").pack(anchor="w", pady=(16, 6))
         tariff = ttk.Frame(body, style="TFrame")
         tariff.pack(fill="x")
 
         tariff.columnconfigure(0, weight=1)
         self._make_tariff_card(
-            tariff, 0, "Peak", "PeakValue.TLabel",
-            self._peak_vars["peak_cost"], self._peak_vars["peak_requests"],
+            tariff,
+            0,
+            "Peak",
+            "PeakValue.TLabel",
+            self._peak_vars["peak_cost"],
+            self._peak_vars["peak_requests"],
         )
         tariff.columnconfigure(1, weight=1)
         self._make_tariff_card(
-            tariff, 1, "Off-Peak", "OffPeakValue.TLabel",
-            self._peak_vars["off_peak_cost"], self._peak_vars["off_peak_requests"],
+            tariff,
+            1,
+            "Off-Peak",
+            "OffPeakValue.TLabel",
+            self._peak_vars["off_peak_cost"],
+            self._peak_vars["off_peak_requests"],
         )
 
         # Daily breakdown -------------------------------------------
-        ttk.Label(body, text="Daily breakdown", style="TLabel").pack(
-            anchor="w", pady=(16, 6)
-        )
+        ttk.Label(body, text="Daily breakdown", style="TLabel").pack(anchor="w", pady=(16, 6))
         table_frame = ttk.Frame(body, style="TFrame")
         table_frame.pack(fill="both", expand=True)
 
         columns = ("date", "cost", "input", "output", "requests")
-        tree = ttk.Treeview(
-            table_frame, columns=columns, show="headings", height=8
-        )
+        tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=8)
         headings = {
             "date": "Date",
             "cost": "Cost",
@@ -360,9 +351,7 @@ class UsageDetailApp:
         footer = ttk.Frame(body, style="Panel.TFrame", padding=(12, 10, 12, 10))
         footer.pack(fill="x", pady=(12, 0))
 
-        ttk.Label(footer, text="Label filter:", style="PanelMuted.TLabel").pack(
-            side="left"
-        )
+        ttk.Label(footer, text="Label filter:", style="PanelMuted.TLabel").pack(side="left")
         self._label_combo = ttk.Combobox(
             footer,
             textvariable=self._label_var,
@@ -372,9 +361,9 @@ class UsageDetailApp:
         self._label_combo.pack(side="left", padx=(8, 0))
         self._label_combo.bind("<<ComboboxSelected>>", self._on_label_selected)
 
-        ttk.Label(
-            footer, textvariable=self._pricing_var, style="PanelMuted.TLabel"
-        ).pack(side="right")
+        ttk.Label(footer, textvariable=self._pricing_var, style="PanelMuted.TLabel").pack(
+            side="right"
+        )
 
     def _make_card(
         self,
@@ -389,9 +378,7 @@ class UsageDetailApp:
         card = ttk.Frame(parent, style="Card.TFrame", padding=(14, 12, 14, 12))
         card.grid(row=0, column=column, sticky="nsew", padx=pad)
         ttk.Label(card, text=title.upper(), style="CardLabel.TLabel").pack(anchor="w")
-        ttk.Label(card, textvariable=value_var, style=value_style).pack(
-            anchor="w", pady=(4, 0)
-        )
+        ttk.Label(card, textvariable=value_var, style=value_style).pack(anchor="w", pady=(4, 0))
 
     def _make_tariff_card(
         self,
@@ -407,12 +394,10 @@ class UsageDetailApp:
         card = ttk.Frame(parent, style="Card.TFrame", padding=(14, 12, 14, 12))
         card.grid(row=0, column=column, sticky="nsew", padx=pad)
         ttk.Label(card, text=title, style="CardLabel.TLabel").pack(anchor="w")
-        ttk.Label(card, textvariable=cost_var, style=value_style).pack(
-            anchor="w", pady=(4, 0)
+        ttk.Label(card, textvariable=cost_var, style=value_style).pack(anchor="w", pady=(4, 0))
+        ttk.Label(card, textvariable=requests_var, style="CardLabel.TLabel").pack(
+            anchor="w", pady=(2, 0)
         )
-        ttk.Label(
-            card, textvariable=requests_var, style="CardLabel.TLabel"
-        ).pack(anchor="w", pady=(2, 0))
 
     # -------------------------------------------------------------- refresh
     def _on_label_selected(self, _event: object | None = None) -> None:
@@ -431,14 +416,10 @@ class UsageDetailApp:
     def _refresh(self) -> None:
         """Read the summary and update all widgets."""
         try:
-            summary = build_summary(
-                self._storage, days=self._days, fingerprint=self._fingerprint
-            )
+            summary = build_summary(self._storage, days=self._days, fingerprint=self._fingerprint)
         except Exception:  # noqa: BLE001 - GUI must never hard-crash
             logger.exception("build_summary failed")
-            self._last_updated.set(
-                "Error reading the database (see log)"
-            )
+            self._last_updated.set("Error reading the database (see log)")
             self._schedule_refresh()
             return
 
@@ -458,17 +439,14 @@ class UsageDetailApp:
     def _schedule_refresh(self) -> None:
         """Schedule the next auto-refresh."""
         if self._after_id is not None:
-            try:
+            with contextlib.suppress(tk.TclError):  # window already destroyed
                 self._root.after_cancel(self._after_id)
-            except tk.TclError:  # pragma: no cover - window already destroyed
-                pass
         self._after_id = self._root.after(self._refresh_ms, self._refresh)
 
     def _update_label_combo(self, summary: dict) -> None:
         """Update dropdown values (labels + ``all``) and the mapping."""
         self._label_to_fp = {
-            resolve_label(self._storage, fp): fp
-            for fp in self._storage.get_distinct_fingerprints()
+            resolve_label(self._storage, fp): fp for fp in self._storage.get_distinct_fingerprints()
         }
         values = ["all", *sorted(self._label_to_fp)]
         current = self._label_var.get()
@@ -480,12 +458,8 @@ class UsageDetailApp:
     def _update_kpis(self, summary: dict) -> None:
         """Set the KPI values."""
         self._kpi_vars["total_cost"].set(_fmt_usd(summary["total_cost"]))
-        self._kpi_vars["total_input_tokens"].set(
-            _fmt_int(summary["total_input_tokens"])
-        )
-        self._kpi_vars["total_output_tokens"].set(
-            _fmt_int(summary["total_output_tokens"])
-        )
+        self._kpi_vars["total_input_tokens"].set(_fmt_int(summary["total_input_tokens"]))
+        self._kpi_vars["total_output_tokens"].set(_fmt_int(summary["total_output_tokens"]))
         self._kpi_vars["requests"].set(_fmt_int(summary["requests"]))
 
     def _update_tariffs(self, summary: dict) -> None:
@@ -493,13 +467,9 @@ class UsageDetailApp:
         peak = summary["peak"]
         off_peak = summary["off_peak"]
         self._peak_vars["peak_cost"].set(_fmt_usd(peak["cost"]))
-        self._peak_vars["peak_requests"].set(
-            f"{_fmt_int(peak['requests'])} Requests"
-        )
+        self._peak_vars["peak_requests"].set(f"{_fmt_int(peak['requests'])} Requests")
         self._peak_vars["off_peak_cost"].set(_fmt_usd(off_peak["cost"]))
-        self._peak_vars["off_peak_requests"].set(
-            f"{_fmt_int(off_peak['requests'])} Requests"
-        )
+        self._peak_vars["off_peak_requests"].set(f"{_fmt_int(off_peak['requests'])} Requests")
 
     def _update_daily(self, summary: dict) -> None:
         """Refill the daily table."""
@@ -536,9 +506,7 @@ class UsageDetailApp:
         )
         model_txt = ", ".join(models) if models else "keine"
         zone_txt = " / ".join(zones) if zones else "keine"
-        self._pricing_var.set(
-            f"Preise: {model_txt} ({zone_txt}) – editierbar im Web-Dashboard"
-        )
+        self._pricing_var.set(f"Preise: {model_txt} ({zone_txt}) – editierbar im Web-Dashboard")
 
     # ------------------------------------------------------------------ run
     def run(self) -> None:
@@ -547,8 +515,6 @@ class UsageDetailApp:
             self._root.mainloop()
         finally:
             if self._after_id is not None:
-                try:
+                with contextlib.suppress(tk.TclError):  # pragma: no cover
                     self._root.after_cancel(self._after_id)
-                except tk.TclError:  # pragma: no cover
-                    pass
                 self._after_id = None

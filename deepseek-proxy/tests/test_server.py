@@ -13,15 +13,15 @@ from proxy.server import DeepSeekProxyServer
 
 # Beispielhafter Anthropic-SSE-Stream (Antwort des Upstream).
 SSE_BODY = (
-    b'event: message_start\n'
+    b"event: message_start\n"
     b'data: {"type":"message_start","message":{"id":"m1","model":"deepseek-flash"},'
     b'"usage":{"input_tokens":55,"output_tokens":1}}\n\n'
-    b': keep-alive\n\n'
-    b'event: content_block_delta\n'
+    b": keep-alive\n\n"
+    b"event: content_block_delta\n"
     b'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\n\n'
-    b'event: message_delta\n'
+    b"event: message_delta\n"
     b'data: {"type":"message_delta","usage":{"output_tokens":12}}\n\n'
-    b'event: message_stop\n'
+    b"event: message_stop\n"
     b'data: {"type":"message_stop"}\n\n'
 )
 
@@ -134,6 +134,7 @@ def test_transparent_passthrough_and_usage():
 
         # 6) Der API-Key-Fingerprint wird aus x-api-key abgeleitet (kein Klartext).
         from proxy.labels import fingerprint_key
+
         assert usage.api_key_fingerprint == fingerprint_key("sk-test-123")
         assert "sk-test-123" not in usage.api_key_fingerprint
 

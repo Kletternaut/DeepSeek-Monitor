@@ -19,7 +19,7 @@ DB_PATH = "/tmp/ds_e2e.db"
 
 
 def _read_key() -> str:
-    with open(KEY_FILE, "r", encoding="utf-8") as f:
+    with open(KEY_FILE, encoding="utf-8") as f:
         return f.read().strip()
 
 
@@ -92,7 +92,7 @@ def main() -> int:
         fp, model, it, ot, cc, cr, tt = rows[0]
         print(f"    fingerprint={fp[:16]}… model={model}")
         print(f"    input={it} output={ot} cache_create={cc} cache_read={cr} total={tt}")
-        match = (it == usage_px.get("input_tokens") and ot == usage_px.get("output_tokens"))
+        match = it == usage_px.get("input_tokens") and ot == usage_px.get("output_tokens")
         print(f"    Token values match the stream: {match}")
     else:
         print("    NO entry found (proxy saved nothing!)")

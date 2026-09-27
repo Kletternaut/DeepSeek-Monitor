@@ -1,7 +1,5 @@
 """Tests for the price model, peak/off-peak logic and cost calculation."""
 
-import json
-
 from proxy.cost_calc import calc_costs, calc_usage_cost
 from proxy.pricing import (
     DEFAULT_PRICING,
@@ -18,7 +16,7 @@ from proxy.usage import TokenUsage
 # Verifizierte Zeiten:
 #   2026-09-25 = Freitag (Werktag)
 #   Peak-Fenster (UTC): 01:00-04:00 und 06:00-10:00
-PEAK_TS = "2026-09-25T11:30:42+02:00"    # UTC 09:30 -> Peak
+PEAK_TS = "2026-09-25T11:30:42+02:00"  # UTC 09:30 -> Peak
 OFFPEAK_TS = "2026-09-25T13:00:00+02:00"  # UTC 11:00 -> Off-Peak
 SATURDAY_TS = "2026-09-26T09:00:00+02:00"  # UTC 07:00 Sa -> Off-Peak (Wochenende)
 MONDAY_PEAK_TS = "2026-09-28T09:00:00+02:00"  # UTC 07:00 Mo -> Peak
@@ -94,7 +92,9 @@ class TestPricingPersistence:
 
 
 class TestCostCalc:
-    def _usage(self, timestamp, input_tokens=1000, cache_read=0, output=500, model="deepseek-flash"):
+    def _usage(
+        self, timestamp, input_tokens=1000, cache_read=0, output=500, model="deepseek-flash"
+    ):
         return TokenUsage(
             timestamp=timestamp,
             input_tokens=input_tokens,
@@ -136,10 +136,20 @@ class TestCostCalc:
 
 class TestCalcCosts:
     def test_aggregation(self):
-        u1 = TokenUsage(timestamp=OFFPEAK_TS, input_tokens=1000, output_tokens=500,
-                        cache_read_input_tokens=400, model="deepseek-flash")
-        u2 = TokenUsage(timestamp=PEAK_TS, input_tokens=200, output_tokens=100,
-                        cache_read_input_tokens=0, model="deepseek-flash")
+        u1 = TokenUsage(
+            timestamp=OFFPEAK_TS,
+            input_tokens=1000,
+            output_tokens=500,
+            cache_read_input_tokens=400,
+            model="deepseek-flash",
+        )
+        u2 = TokenUsage(
+            timestamp=PEAK_TS,
+            input_tokens=200,
+            output_tokens=100,
+            cache_read_input_tokens=0,
+            model="deepseek-flash",
+        )
         r = calc_costs([u1, u2])
         assert r["requests"] == 2
         assert r["total_input_tokens"] == 1200
