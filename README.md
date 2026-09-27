@@ -21,6 +21,8 @@ Host C (VS Code + Proxy) ─┘        (write)                 (read)
 
 Ausführliche Schritt-für-Schritt-Anleitung: **[`INSTALLATION.md`](INSTALLATION.md)**
 
+Verzeichnis-/Datei-Referenz (was ist wo, was macht was): **[`STRUCTURE.md`](STRUCTURE.md)**
+
 Kurzfassung:
 
 ```bash
