@@ -1423,6 +1423,7 @@ def analyze_proxy_usage(
         status = status_at(ts_utc)
         local = ts_utc.astimezone(tz)
         day_key = local.date().isoformat()
+        host = str(event.get("host") or "").strip() or "unknown"
 
         row = daily.setdefault(
             day_key,
@@ -1436,6 +1437,9 @@ def analyze_proxy_usage(
         )
 
         row["usage"] += amount
+        row_zones = row.setdefault("_zone_hosts", {})
+        zone_hosts = row_zones.setdefault(status, {})
+        zone_hosts[host] = zone_hosts.get(host, 0.0) + amount
 
         if status == "PEAK":
             peak_usage += amount
@@ -1476,6 +1480,14 @@ def analyze_proxy_usage(
     daily_rows: list[dict[str, Any]] = []
 
     for date_key, row in daily.items():
+        zone_hosts: dict[str, dict[str, float]] = {}
+        for zone, hosts in row.get("_zone_hosts", {}).items():
+            zone_hosts[zone] = {
+                h: round(a, 6)
+                for h, a in sorted(
+                    hosts.items(), key=lambda kv: kv[1], reverse=True
+                )
+            }
         daily_rows.append(
             {
                 "date": date_key,
@@ -1484,6 +1496,7 @@ def analyze_proxy_usage(
                 "standard_usage": round(row["standard_usage"], 6),
                 "weekend_usage": round(row["weekend_usage"], 6),
                 "avoidable_savings": round(row["avoidable_savings"], 6),
+                "zone_hosts": zone_hosts,
             }
         )
 
@@ -1502,6 +1515,7 @@ def analyze_proxy_usage(
                 "standard_usage": 0.0,
                 "weekend_usage": 0.0,
                 "avoidable_savings": 0.0,
+                "zone_hosts": {},
             }
         daily_rows.append(row)
 
@@ -1531,6 +1545,23 @@ def analyze_proxy_usage(
         "daily": daily_rows,
         "intervals": intervals[:ANALYTICS_INTERVAL_LIMIT],
     }
+
+
+def _shade_hex(color: str, factor: float) -> str:
+    """Skaliert eine ``#RRGGBB``-Farbe um ``factor`` (1.0 = unverändert,
+    < 1.0 = dunkler, > 1.0 = heller). Ergebnis wird auf den gültigen
+    Bereich geklemmt und wieder als ``#RRGGBB`` zurückgegeben."""
+    color = color.lstrip("#")
+    if len(color) != 6:
+        return "#" + color
+    try:
+        r, g, b = (int(color[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return "#" + color
+    r = max(0, min(255, int(r * factor)))
+    g = max(0, min(255, int(g * factor)))
+    b = max(0, min(255, int(b * factor)))
+    return f"#{r:02x}{g:02x}{b:02x}"
 
 
 def format_money(
@@ -4823,6 +4854,50 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
 
         self._draw_stacked_daily_chart(ui["canvas"], analytics=True)
 
+    def _show_bar_tooltip(self, text: str) -> None:
+        """Zeigt ein kleines, nicht-modales Tooltip-Fenster an der Maus."""
+        tip = getattr(self, "_bar_tooltip", None)
+        if tip is None:
+            tip = tk.Toplevel(self.root)
+            tip.withdraw()
+            tip.overrideredirect(True)
+            try:
+                tip.attributes("-topmost", True)
+            except tk.TclError:
+                pass
+            lbl = tk.Label(
+                tip,
+                text="",
+                font=("Segoe UI", 8),
+                bg=COLOR_CARD,
+                fg=COLOR_TEXT_MAIN,
+                relief="solid",
+                bd=1,
+                padx=6,
+                pady=3,
+                justify="left",
+            )
+            lbl.pack()
+            self._bar_tooltip = tip
+            self._bar_tooltip_label = lbl
+        self._bar_tooltip_label.config(text=text)
+        try:
+            x = self.root.winfo_pointerx() + 14
+            y = self.root.winfo_pointery() + 14
+            tip.geometry(f"+{x}+{y}")
+            tip.deiconify()
+            tip.lift()
+        except tk.TclError:
+            pass
+
+    def _hide_bar_tooltip(self) -> None:
+        tip = getattr(self, "_bar_tooltip", None)
+        if tip is not None:
+            try:
+                tip.withdraw()
+            except tk.TclError:
+                pass
+
     def _draw_stacked_daily_chart(self, canvas: tk.Canvas, analytics: bool = False) -> None:
         canvas.delete("all")
         with self._state_lock:
@@ -4851,23 +4926,88 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
 
         canvas.create_line(left, base_y, width-right, base_y, fill=COLOR_CARD_BORDER)
 
+        # Zone×Host-Modus: Jedes Segment gehört zu einer Tarifzone (Farbe) und
+        # einem Host (Abdunkelung). Grundfarbe = Tarif-Farbe; jeder weitere
+        # Host dunkelt seine Grundfarbe um 5 % ab (Index über alle Hosts).
+        # Stapelreihenfolge: STANDARD (unten) → WEEKEND → PEAK (oben).
+        zone_colors = STATUS_COLORS
+        zone_order = ("STANDARD", "WEEKEND", "PEAK")
+
+        has_segments = any(r.get("zone_hosts") for r in data)
+        host_index: dict[str, int] = {}
+        if has_segments:
+            all_hosts = sorted(
+                {
+                    h
+                    for r in data
+                    for zh in r.get("zone_hosts", {}).values()
+                    for h in zh
+                }
+            )
+            for idx, h in enumerate(all_hosts):
+                host_index[h] = idx
+
+        def _zone_host_color(zone: str, host: str) -> str:
+            base = zone_colors.get(zone, COLOR_STANDARD)
+            idx = host_index.get(host, 0)
+            return _shade_hex(base, max(0.15, 1.0 - 0.05 * idx))
+
         for i, row in enumerate(data):
             x = left + slot * i + slot / 2
-            values = (
-                (float(row["standard_usage"]), COLOR_STANDARD),
-                (float(row["weekend_usage"]), COLOR_WEEKEND),
-                (float(row["peak_usage"]), COLOR_PEAK),
-            )
+            if has_segments:
+                segments: list[tuple[float, str, str, str]] = []
+                for zone in zone_order:
+                    for host, amount in row.get("zone_hosts", {}).get(zone, {}).items():
+                        segments.append(
+                            (float(amount), _zone_host_color(zone, host), host, zone)
+                        )
+            else:
+                segments = [
+                    (float(row["standard_usage"]), COLOR_STANDARD, None, "STANDARD"),
+                    (float(row["weekend_usage"]), COLOR_WEEKEND, None, "WEEKEND"),
+                    (float(row["peak_usage"]), COLOR_PEAK, None, "PEAK"),
+                ]
+
+            # Tooltip: Host-Anteile des Tages (einmal pro Balken berechnet).
+            tooltip_text: str | None = None
+            if has_segments:
+                day_hosts = {
+                    h
+                    for zh in row.get("zone_hosts", {}).values()
+                    for h in zh
+                }
+                tooltip_lines = []
+                for h in sorted(day_hosts):
+                    host_total = sum(
+                        row.get("zone_hosts", {}).get(z, {}).get(h, 0.0)
+                        for z in zone_order
+                    )
+                    if host_total > 0:
+                        pct = (
+                            host_total / float(row["usage"]) * 100
+                            if row["usage"]
+                            else 0.0
+                        )
+                        tooltip_lines.append(f"{h}: {host_total:.4f} ({pct:.1f}%)")
+                if tooltip_lines:
+                    tooltip_text = "\n".join(tooltip_lines)
+
             cursor = base_y
             total_height = float(row["usage"]) / max_value * plot_h
-            for value, color in values:
-                segment = value / max_value * plot_h
+            for amount, color, host, zone in segments:
+                segment = amount / max_value * plot_h
                 if segment <= 0:
                     continue
-                canvas.create_rectangle(
+                rect = canvas.create_rectangle(
                     x-bar_w/2, cursor-segment, x+bar_w/2, cursor,
                     fill=color, outline="",
                 )
+                if tooltip_text:
+                    canvas.tag_bind(
+                        rect, "<Enter>",
+                        lambda e, t=tooltip_text: self._show_bar_tooltip(t),
+                    )
+                    canvas.tag_bind(rect, "<Leave>", lambda e: self._hide_bar_tooltip())
                 cursor -= segment
 
             day = dt.date.fromisoformat(row["date"])
