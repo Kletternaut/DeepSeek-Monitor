@@ -24,13 +24,16 @@ Ausführliche Schritt-für-Schritt-Anleitung: **[`.copilot/INSTALLATION.md`](.co
 Kurzfassung:
 
 ```bash
-git clone --branch realtime-cost-monitor https://github.com/Kletternaut/DeepSeek.git deepseek
+git clone --branch main https://github.com/Kletternaut/DeepSeek-Monitor.git deepseek
 cd ~/deepseek/deepseek-proxy
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 # influx.env anlegen (0600, wird NICHT via Git verteilt)
 sudo cp deepseek-proxy.service /etc/systemd/system/
 sudo systemctl enable --now deepseek-proxy
 ```
+
+Proxy-Quellcode im Repository:
+<https://github.com/Kletternaut/DeepSeek-Monitor/tree/main/deepseek-proxy>
 
 ---
 
@@ -82,3 +85,53 @@ DISPLAY=:10.0 timeout 5 python3 ~/deepseek/deepseek_rates_latest.py
   umbiegen (Secret unverändert lassen).
 
 Details zur InfluxDB-Integration: **[`.copilot/INFLUXDB.md`](.copilot/INFLUXDB.md)**
+
+---
+
+## VS Code einrichten (Custom Endpoint)
+
+Damit VS Code über den lokalen Proxy läuft, die Datei
+`~/.config/Code/User/chatLanguageModels.json` wie folgt konfigurieren. Der
+`apiKey` bleibt eine Referenz auf den im VS-Code-Secret-Store hinterlegten
+Schlüssel — **kein echter Key eintragen**.
+
+```json
+[
+  {
+    "name": "DeepSeek Official",
+    "vendor": "customendpoint",
+    "apiKey": "${input:chat.lm.secret.<IHRE_SECRET_ID>}",
+    "apiType": "messages",
+    "models": [
+      {
+        "id": "deepseek-flash",
+        "name": "DeepSeek V4.1 Flash",
+        "url": "http://127.0.0.1:8000/anthropic",
+        "toolCalling": true,
+        "vision": true,
+        "thinking": true,
+        "supportsReasoningEffort": ["low", "high", "max"],
+        "reasoningEffortFormat": "messages",
+        "contextWindow": 1000000,
+        "maxOutputTokens": 32768,
+        "includeReasoning": true
+      },
+      {
+        "id": "deepseek-v4-pro",
+        "name": "DeepSeek V4 Pro",
+        "url": "http://127.0.0.1:8000/anthropic",
+        "toolCalling": true,
+        "vision": false,
+        "thinking": true,
+        "supportsReasoningEffort": ["low", "high", "max"],
+        "reasoningEffortFormat": "messages",
+        "contextWindow": 1000000,
+        "maxOutputTokens": 32768,
+        "includeReasoning": true
+      }
+    ]
+  }
+]
+```
+
+Nach der Änderung VS Code neu laden (Reload Window).

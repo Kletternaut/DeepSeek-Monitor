@@ -168,7 +168,7 @@ def detect_language() -> str:
 
 BASE_TRANSLATIONS = {
     "de": {
-        "tariff":" Tarif ", "realtime":" Realtime ", "analytics":" Analytics ", "costs":"Kosten & Verbrauch",
+        "tariff":" Tarif ", "realtime":" Echtzeit ", "analytics":" Analytics ", "costs":"Kosten & Verbrauch",
         "tz":"TZ:", "weekend":"Wochenende:", "weekend_text":" Sa 00:00 – Mo 00:00 (Peking-Zeit)",
         "peak":"Peak:", "standard":"Std:", "refresh":"Jetzt aktualisieren",
         "api":"API", "api_key":"API-Key", "api_key_title":"DeepSeek API-Key",
@@ -202,6 +202,7 @@ BASE_TRANSLATIONS = {
         "poll_interval":"Balance-Abfrage", "poll_interval_hint":"Sekunden (mind. 20)", "apply":"Übernehmen", "saved":"Gespeichert ✓",
         "data_source":"Datenquelle", "local_proxy":"Lokal (Proxy/SQLite)", "influxdb":"InfluxDB (zentral)",
         "influx_url":"URL", "influx_token":"Token", "influx_org":"Organisation", "influx_bucket":"Bucket",
+        "host":"Host", "all_hosts":"Alle Hosts",
     },
     "en": {
         "tariff":" Rate ", "realtime":" Realtime ", "analytics":" Analytics ", "costs":"Cost & Usage",
@@ -238,6 +239,7 @@ BASE_TRANSLATIONS = {
         "poll_interval":"Balance polling", "poll_interval_hint":"seconds (min. 20)", "apply":"Apply", "saved":"Saved ✓",
         "data_source":"Data source", "local_proxy":"Local (proxy/SQLite)", "influxdb":"InfluxDB (central)",
         "influx_url":"URL", "influx_token":"Token", "influx_org":"Organization", "influx_bucket":"Bucket",
+        "host":"Host", "all_hosts":"All hosts",
     },
 }
 TRANSLATIONS = {code: dict(BASE_TRANSLATIONS["en"]) for code in LANGUAGES}
@@ -339,6 +341,7 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "tarif_config")
 API_KEY_FILE = os.path.join(CONFIG_DIR, "api_key")
 POLL_INTERVAL_FILE = os.path.join(CONFIG_DIR, "poll_interval")
 INFLUX_CONFIG_FILE = os.path.join(CONFIG_DIR, "influx_config")
+LANGUAGE_FILE = os.path.join(CONFIG_DIR, "language")
 
 HISTORY_FILE = os.path.join(STATE_DIR, "balance_history.json")
 DAILY_CSV_FILE = os.path.join(DATA_DIR, "daily_usage.csv")
@@ -430,6 +433,36 @@ def save_timezone(tz_name: str) -> None:
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             f.write(tz_name)
     except OSError:
+        pass
+
+
+def load_language() -> str | None:
+    """Lädt die manuell gesetzte Sprache (oder ``None``, wenn nicht gesetzt).
+
+    Eine manuelle Auswahl hat Vorrang vor der automatischen System-Erkennung.
+    """
+    try:
+        with open(LANGUAGE_FILE, "r", encoding="utf-8") as f:
+            code = f.read().strip()
+        if code in LANGUAGES:
+            return code
+    except OSError:
+        pass
+    return None
+
+
+def save_language(code: str) -> None:
+    try:
+        with open(LANGUAGE_FILE, "w", encoding="utf-8") as f:
+            f.write(code)
+    except OSError:
+        pass
+
+
+def remove_language() -> None:
+    try:
+        os.remove(LANGUAGE_FILE)
+    except FileNotFoundError:
         pass
 
 
@@ -1599,8 +1632,8 @@ class _LegacyDeepSeekFiligreeGUI:
 
         self.tz_name = load_timezone()
         self.tz = zoneinfo.ZoneInfo(self.tz_name)
-        self._language_auto = True
-        self.language = detect_language()
+        self._language_auto = load_language() is None
+        self.language = load_language() or detect_language()
         self._api_key_dialog = None
 
         self._state_lock = threading.Lock()
@@ -2500,6 +2533,7 @@ class _LegacyDeepSeekFiligreeGUI:
         if language not in LANGUAGES:
             return
         self.language = language
+        save_language(language)
         if hasattr(self, "lang_btn"):
             self.lang_btn.config(text=language.upper())
         self._retranslate_ui()
@@ -2507,6 +2541,7 @@ class _LegacyDeepSeekFiligreeGUI:
 
     def _reset_language_auto(self) -> None:
         self._language_auto = True
+        remove_language()
         self.language = detect_language()
         self.lang_btn.config(text=self.language.upper())
         self._retranslate_ui()
@@ -3631,7 +3666,8 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
 
         self.tz_name = load_timezone()
         self.tz = zoneinfo.ZoneInfo(self.tz_name)
-        self.language = detect_language()
+        self._language_auto = load_language() is None
+        self.language = load_language() or detect_language()
 
         self._api_key_dialog = None
         self._state_lock = threading.Lock()
@@ -3989,7 +4025,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         # Host-Filter (nur bei aktivem InfluxDB-Modus sinnvoll).
         if INFLUX_ENABLED:
             host_lbl = tk.Label(
-                header, text="Host:",
+                header, text=self.t("host") + ":",
                 font=("Segoe UI", 8),
                 fg=COLOR_TEXT_DIM, bg=COLOR_BG,
             )
@@ -4190,8 +4226,8 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         except Exception:
             hosts = []
 
-        values = ["Alle Hosts"] + hosts
-        current = self._host_filter if self._host_filter in hosts else "Alle Hosts"
+        values = [self.t("all_hosts")] + hosts
+        current = self._host_filter if self._host_filter in hosts else self.t("all_hosts")
         combo["values"] = values
         combo.set(current)
 
@@ -4202,7 +4238,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
             return
 
         value = combo.get().strip()
-        if value in ("", "Alle Hosts"):
+        if value in ("", self.t("all_hosts")):
             self._host_filter = ""
         else:
             self._host_filter = value
@@ -4255,7 +4291,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         if settings_window is not None:
             settings_window.focus_set()
 
-        messagebox.showinfo(self.t("saved"), self.t("saved"))
+        self._show_saved_dialog(settings_window)
 
     def _close_settings_window(self) -> None:
         win = getattr(self, "_settings_window", None)
@@ -4598,7 +4634,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
                 self._cost_rendered_version = -1
                 self._update_cost_window(force=True)
 
-            messagebox.showinfo(self.t("saved"), self.t("saved"))
+            self._show_saved_dialog(win)
 
         apply_influx_btn = tk.Button(
             source,
@@ -4687,11 +4723,13 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
             return
         self._language_auto = False
         self.language = language
+        save_language(language)
         self._retranslate_ui()
         button.set(f"{LANGUAGES[language]} ({language.upper()})")
 
     def _reset_language_from_settings(self, button: ttk.Combobox) -> None:
         self._language_auto = True
+        remove_language()
         self.language = detect_language()
         self._retranslate_ui()
         button.set(self.t("auto"))
@@ -4853,6 +4891,79 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
                 )
 
         self._draw_stacked_daily_chart(ui["canvas"], analytics=True)
+
+    def _show_saved_dialog(self, parent: tk.Misc | None = None) -> None:
+        """Zeigt einen themen-konsistenten Bestätigungsdialog („Gespeichert").
+
+        Ersetzt ``messagebox.showinfo``, dessen Standard-Optik (hell/grau) nicht
+        zum dunklen Farbthema passt. Der Dialog ist modal über ``parent`` und
+        wird über den OK-Button oder ``Escape`` geschlossen.
+        """
+        owner = parent if parent is not None else self.root
+        dlg = tk.Toplevel(owner)
+        dlg.title(self.t("saved"))
+        dlg.configure(bg=COLOR_BG)
+        dlg.resizable(False, False)
+        dlg.transient(owner)
+
+        frame = tk.Frame(
+            dlg,
+            bg=COLOR_CARD,
+            highlightbackground=COLOR_CARD_BORDER,
+            highlightthickness=1,
+        )
+        frame.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
+
+        tk.Label(
+            frame,
+            text=self.t("saved"),
+            font=("Segoe UI", 9, "bold"),
+            fg=COLOR_TEXT_MAIN,
+            bg=COLOR_CARD,
+        ).pack(padx=24, pady=(16, 12))
+
+        def _close(event: object | None = None) -> None:
+            try:
+                dlg.grab_release()
+            except tk.TclError:
+                pass
+            try:
+                dlg.destroy()
+            except tk.TclError:
+                pass
+
+        ok_btn = tk.Button(
+            frame,
+            text="OK",
+            command=_close,
+            font=("Segoe UI", 8, "bold"),
+            fg=COLOR_TEXT_MAIN,
+            bg=COLOR_ACCENT,
+            activebackground=COLOR_ACCENT,
+            activeforeground="#000000",
+            relief="flat",
+            borderwidth=0,
+            padx=18,
+            pady=3,
+            cursor="hand2",
+        )
+        ok_btn.pack(pady=(0, 14))
+
+        dlg.bind("<Escape>", _close)
+        dlg.bind("<Return>", _close)
+
+        dlg.update_idletasks()
+        w = dlg.winfo_reqwidth()
+        h = dlg.winfo_reqheight()
+        try:
+            ox = owner.winfo_rootx() + (owner.winfo_width() - w) // 2
+            oy = owner.winfo_rooty() + (owner.winfo_height() - h) // 2
+            dlg.geometry(f"+{max(0, ox)}+{max(0, oy)}")
+        except tk.TclError:
+            pass
+
+        dlg.grab_set()
+        ok_btn.focus_set()
 
     def _show_bar_tooltip(self, text: str) -> None:
         """Zeigt ein kleines, nicht-modales Tooltip-Fenster an der Maus."""
