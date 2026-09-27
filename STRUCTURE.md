@@ -23,6 +23,7 @@ This repository bundles two components for monitoring DeepSeek API usage:
 ├── changelog.md                 # change history
 ├── deepseek_rates_v2.4.0.py     # the monitor (Tkinter frontend); imports the logic from deepseek_monitor/
 ├── deepseek_rates_latest.py     # symlink → deepseek_rates_v2.4.0.py (stable start path)
+├── deepseek-monitor.desktop.example  # desktop entry to start the monitor app manually
 ├── deepseek_monitor/            # pure, Tkinter-free logic of the monitor app (package)
 │   ├── __init__.py              # package marker + version
 │   ├── config.py                # constants & colors (tariff assumptions, poll intervals, URLs)
