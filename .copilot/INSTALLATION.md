@@ -129,6 +129,37 @@ EOF
 chmod +x ~/.local/share/applications/deepseek-monitor.desktop
 ```
 
+### 2.7 Monitor: bestehendes Desktop-Icon aktualisieren
+
+Achtung: Auf bereits eingerichteten Hosts liegt oft noch ein **altes Icon auf dem
+Schreibtisch** (`~/Desktop/deepseek.desktop`), das auf die alte Datei
+`deepseek_rates.py` und das alte SVG-Icon zeigt. Diese Dateien existieren nach
+dem Clone/Aufräumen **nicht mehr** → das Icon tut nichts. Dieses Icon ist das,
+was der User tatsächlich anklickt (nicht der Menü-Eintrag aus 2.6).
+
+```bash
+cp ~/Desktop/deepseek.desktop ~/Desktop/deepseek.desktop.bak-$(date +%Y%m%d%H%M%S)
+cat > ~/Desktop/deepseek.desktop <<'EOF'
+[Desktop Entry]
+Version=1.5
+Type=Application
+Name=DeepSeek
+Comment=DeepSeek API Kosten- & Verbrauchs-Monitor
+Icon=/home/admin/deepseek/deepseek_logo.png
+Exec=env DISPLAY=:10.0 python3 /home/admin/deepseek/deepseek_rates_latest.py
+Terminal=false
+Categories=Utility;
+EOF
+chmod +x ~/Desktop/deepseek.desktop
+```
+
+Referenzen prüfen (müssen existieren):
+
+```bash
+ls -la /home/admin/deepseek/deepseek_rates_latest.py   # Symlink -> v2.4.0
+ls -la /home/admin/deepseek/deepseek_logo.png
+```
+
 ---
 
 ## 3. WICHTIG: `DISPLAY` beim Desktop-Start (xrdp)
@@ -175,6 +206,7 @@ Läuft er ohne Fehlermeldung, ist der Display-Wert korrekt.
 | Symptom | Ursache | Lösung |
 |---|---|---|
 | Icon startet nichts | `$DISPLAY` fehlt (xrdp) | `env DISPLAY=:10.0` in `Exec` (Abschnitt 3) |
+| Icon startet nichts (trotz `DISPLAY`) | altes Desktop-Icon zeigt auf tote Dateien (`deepseek_rates.py`, `DeepSeek.svg` nach Clone/Aufräumen weg) | Icon auf `deepseek_rates_latest.py` + `deepseek_logo.png` umbiegen (Abschnitt 2.7) |
 | `python3` nicht gefunden im Desktop | pyenv-Shim nicht initialisiert | `python3` durch `/usr/bin/python3` ersetzen oder Login-Shell nutzen |
 | Proxy läuft, aber keine Influx-Daten | `influx.env` fehlt / falsch | Datei prüfen, `chmod 600`, `systemctl restart deepseek-proxy` |
 | VS Code nutzt noch Direkt-Endpoint | Config gecacht | VS Code neu laden, `chatLanguageModels.json` prüfen |
