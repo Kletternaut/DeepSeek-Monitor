@@ -73,10 +73,51 @@ GUI-Einstellungen unter „Datenquelle" gewählt.
 
 ## 5. VS Code einrichten (Custom Endpoint)
 
-Damit VS Code über den lokalen Proxy läuft, in
-`~/.config/Code/User/chatLanguageModels.json` die Modell-URL auf
-`http://127.0.0.1:8000/anthropic` setzen (Secret unverändert lassen). Ein
-vollständiges Beispiel steht im [`README.md`](README.md).
+Damit VS Code über den lokalen Proxy läuft, die Datei
+`~/.config/Code/User/chatLanguageModels.json` wie folgt konfigurieren. Der
+`apiKey` bleibt eine Referenz auf den im VS-Code-Secret-Store hinterlegten
+Schlüssel — **kein echter Key eintragen**.
+
+```json
+[
+  {
+    "name": "DeepSeek Official",
+    "vendor": "customendpoint",
+    "apiKey": "${input:chat.lm.secret.<IHRE_SECRET_ID>}",
+    "apiType": "messages",
+    "models": [
+      {
+        "id": "deepseek-flash",
+        "name": "DeepSeek V4.1 Flash",
+        "url": "http://127.0.0.1:8000/anthropic",
+        "toolCalling": true,
+        "vision": true,
+        "thinking": true,
+        "supportsReasoningEffort": ["low", "high", "max"],
+        "reasoningEffortFormat": "messages",
+        "contextWindow": 1000000,
+        "maxOutputTokens": 32768,
+        "includeReasoning": true
+      },
+      {
+        "id": "deepseek-v4-pro",
+        "name": "DeepSeek V4 Pro",
+        "url": "http://127.0.0.1:8000/anthropic",
+        "toolCalling": true,
+        "vision": false,
+        "thinking": true,
+        "supportsReasoningEffort": ["low", "high", "max"],
+        "reasoningEffortFormat": "messages",
+        "contextWindow": 1000000,
+        "maxOutputTokens": 32768,
+        "includeReasoning": true
+      }
+    ]
+  }
+]
+```
+
+Nach der Änderung VS Code neu laden (Reload Window).
 
 ---
 
