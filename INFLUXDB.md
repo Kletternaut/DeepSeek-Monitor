@@ -68,10 +68,11 @@ DEEPSEEK_INFLUX_BUCKET=<BUCKET>
 
 ```ini
 [Service]
-ExecStart=$HOME/deepseek/deepseek-proxy/.venv/bin/python $HOME/deepseek/deepseek-proxy/main.py
-EnvironmentFile=-$HOME/deepseek/deepseek-proxy/influx.env
+ExecStart=/home/USER/DeepSeek-Monitor/deepseek-proxy/.venv/bin/python /home/USER/DeepSeek-Monitor/deepseek-proxy/main.py
+EnvironmentFile=-/home/USER/DeepSeek-Monitor/deepseek-proxy/influx.env
 ```
 
+> Replace `/home/USER` with your installation path (see `deepseek-proxy.service`).
 > The leading `-` in `EnvironmentFile=-...` means: no error if the file is
 > missing (→ the proxy then automatically runs SQLite-only).
 

@@ -38,6 +38,9 @@ Without this file the proxy writes only to SQLite locally.
 
 ### Activate the systemd service
 
+Before copying the unit, edit `deepseek-proxy.service` and replace `/home/USER`
+with your installation path (and `User`/`Group` with your username):
+
 ```bash
 sudo cp deepseek-proxy.service /etc/systemd/system/deepseek-proxy.service
 sudo systemctl daemon-reload
@@ -71,7 +74,38 @@ python3 deepseek_rates_latest.py
 The data source (local proxy/SQLite vs. central InfluxDB) is selected in the
 GUI settings under "Data source".
 
-## 5. Set up VS Code (custom endpoint)
+## 5. Desktop entries (optional)
+
+The repository ships two example desktop entries so you can start the proxy and
+the monitor from your desktop menu instead of the terminal:
+
+| File | Starts |
+|---|---|
+| `deepseek-monitor.desktop.example` | The monitor app (Tkinter GUI) |
+| `deepseek-proxy/deepseek-proxy.desktop.example` | The proxy (in a terminal, without systemd) |
+
+To use one:
+
+1. Copy the example to your applications directory:
+   ```bash
+   cp deepseek-monitor.desktop.example ~/.local/share/applications/deepseek-monitor.desktop
+   cp deepseek-proxy/deepseek-proxy.desktop.example ~/.local/share/applications/deepseek-proxy.desktop
+   ```
+2. Edit the copied file and replace `/home/USER` in the `Icon=` and `Exec=` lines
+   with your absolute installation path (the directory created by `git clone`,
+   e.g. `/home/alice/DeepSeek-Monitor`). Desktop entries do **not** expand shell
+   variables like `$HOME`, so an absolute path is required.
+3. (Optional) If the desktop environment does not trust the file yet, mark it
+   executable:
+   ```bash
+   chmod +x ~/.local/share/applications/deepseek-monitor.desktop
+   ```
+
+The icon files referenced by `Icon=` (`assets/deepseek-monitor-256.png` and
+`assets/deepseek-proxy-256.png`) are already part of the repository, so no
+separate download is needed.
+
+## 6. Set up VS Code (custom endpoint)
 
 To make VS Code go through the local proxy, configure the file
 `~/.config/Code/User/chatLanguageModels.json` as follows. The `apiKey` remains a

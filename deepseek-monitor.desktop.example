@@ -2,8 +2,8 @@
 Type=Application
 Name=DeepSeek Monitor
 Comment=Start the DeepSeek monitor app (Tkinter "Cost & Usage")
-Icon=/opt/deepseek-monitor/assets/deepseek-monitor-256.png
-Exec=/opt/deepseek-monitor/venv/bin/python /opt/deepseek-monitor/deepseek_rates_latest.py
+Icon=/home/USER/DeepSeek-Monitor/assets/deepseek-monitor-256.png
+Exec=python3 /home/USER/DeepSeek-Monitor/deepseek_rates_latest.py
 Terminal=false
 Categories=Development;Network;
 Keywords=DeepSeek;Monitor;Cost;Usage;Tkinter;
@@ -12,13 +12,12 @@ Keywords=DeepSeek;Monitor;Cost;Usage;Tkinter;
 # Example desktop entry to start the monitor app (Tkinter GUI).
 #
 # How to use:
-#   1. Adjust the paths above to your installation location
-#      (replace /opt/deepseek-monitor with your checkout path, e.g.
-#       /home/<user>/DeepSeek-Monitor).
-#   2. Adjust the Python interpreter to the venv you use, e.g.:
-#        Exec=python3 /home/<user>/DeepSeek-Monitor/deepseek_rates_latest.py
-#      The monitor app only needs the stdlib + tkinter, so a plain
-#      `python3` is usually enough (no virtualenv required).
+#   1. Replace /home/USER with the absolute path of your installation
+#      (the directory created by `git clone`, e.g. /home/alice/DeepSeek-Monitor)
+#      in the Icon= and Exec= lines above. Desktop entries do NOT expand
+#      shell variables like $HOME, so an absolute path is required.
+#   2. The monitor app only needs the stdlib + tkinter, so a plain `python3`
+#      is usually enough (no virtualenv required).
 #   3. Copy this file to ~/.local/share/applications/deepseek-monitor.desktop
 #      (or /usr/share/applications/ for all users).
 #   4. Make it executable if you placed it on your desktop:

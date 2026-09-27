@@ -1,36 +1,39 @@
-# systemd-System-Unit für den DeepSeek-Anthropic-Proxy.
+# systemd system unit for the DeepSeek-Anthropic proxy.
 #
-# Installation (als root bzw. mit sudo):
-#   1. Pfade in dieser Unit an deine Umgebung anpassen (User, Group,
-#      WorkingDirectory, ExecStart, EnvironmentFile).
+# Installation (as root or with sudo):
+#   1. Replace /home/USER with the absolute path of your installation
+#      (the directory created by `git clone`, e.g. /home/alice/DeepSeek-Monitor)
+#      in the User, Group, WorkingDirectory, ExecStart and EnvironmentFile lines
+#      below. The default assumes you run the proxy as your own user.
 #   2. sudo cp deepseek-proxy.service /etc/systemd/system/
 #   3. sudo systemctl daemon-reload
 #   4. sudo systemctl enable --now deepseek-proxy
 #
-# Status / Logs:
+# Status / logs:
 #   systemctl status deepseek-proxy
 #   journalctl -u deepseek-proxy -f
 #
-# Deaktivieren:
+# Disable:
 #   sudo systemctl disable --now deepseek-proxy
 
 [Unit]
-Description=DeepSeek Anthropic Messages Streaming-Proxy mit Usage-Monitoring
+Description=DeepSeek Anthropic Messages streaming proxy with usage monitoring
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-# Service-Benutzer (anpassen bzw. mit `sudo useradd -r deepseek-proxy` anlegen).
-User=deepseek-proxy
-Group=deepseek-proxy
-# Installationsort des Projekts (anpassen).
-WorkingDirectory=/opt/deepseek-monitor/deepseek-proxy
-ExecStart=/opt/deepseek-monitor/deepseek-proxy/.venv/bin/python /opt/deepseek-monitor/deepseek-proxy/main.py
+# Run as your own user (replace USER). For a dedicated service user, create one
+# with `sudo useradd -r deepseek-proxy` and set User/Group accordingly.
+User=USER
+Group=USER
+# Installation directory of the project (replace USER).
+WorkingDirectory=/home/USER/DeepSeek-Monitor/deepseek-proxy
+ExecStart=/home/USER/DeepSeek-Monitor/deepseek-proxy/.venv/bin/python /home/USER/DeepSeek-Monitor/deepseek-proxy/main.py
 Environment=PYTHONUNBUFFERED=1
-# Optionale InfluxDB-Konfiguration (DEEPSEEK_INFLUX_*). Die Datei enthält ein
-# Token, daher mit 0600 ablegen und NICHT committen.
-EnvironmentFile=-/etc/deepseek-monitor/influx.env
+# Optional InfluxDB configuration (DEEPSEEK_INFLUX_*). The file contains a
+# token, so store it with 0600 permissions and do NOT commit it.
+EnvironmentFile=-/home/USER/DeepSeek-Monitor/deepseek-proxy/influx.env
 Restart=on-failure
 RestartSec=5
 
