@@ -6,6 +6,13 @@ influx.env
 .venv/
 .pytest_cache/
 
+# Lokale Copilot-Notizen (nur lokal, nicht im Repo)
+.copilot/
+
 # GROSS geschriebene Ordner werden nie gepusht
 BACKUP/
 DEVELOPMENT/
+
+# Fremdes Repo / verwaiste Datei (nicht committen)
+deepseek-cost-monitor/
+DeepSeek.svg

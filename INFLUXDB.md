@@ -154,7 +154,8 @@ Im InfluxDB-Modus erscheint im Fenster „Kosten & Verbrauch" ein **Host-Dropdow
 
 ## 6. Downsampling (tägliche Aggregation, optional)
 
-Siehe `.copilot/influx-downsampling/README.md` und `downsample_daily.flux`.
+> Die Flux-Skripte und die Anleitung hierzu liegen **nur lokal** unter
+> `.copilot/influx-downsampling/` (nicht im Repository).
 
 Kurzfassung:
 - Rohdaten-Bucket `deepseek-usage`: Retention **90 Tage**.

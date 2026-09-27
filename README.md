@@ -19,7 +19,7 @@ Host C (VS Code + Proxy) ─┘        (write)                 (read)
 
 ## Installation auf einem Host
 
-Ausführliche Schritt-für-Schritt-Anleitung: **[`.copilot/INSTALLATION.md`](.copilot/INSTALLATION.md)**
+Ausführliche Schritt-für-Schritt-Anleitung: **[`INSTALLATION.md`](INSTALLATION.md)**
 
 Kurzfassung:
 
@@ -84,7 +84,7 @@ DISPLAY=:10.0 timeout 5 python3 ~/deepseek/deepseek_rates_latest.py
 - VS Code: `chatLanguageModels.json` → Modell-URL auf `http://127.0.0.1:8000/anthropic`
   umbiegen (Secret unverändert lassen).
 
-Details zur InfluxDB-Integration: **[`.copilot/INFLUXDB.md`](.copilot/INFLUXDB.md)**
+Details zur InfluxDB-Integration: **[`INFLUXDB.md`](INFLUXDB.md)**
 
 ---
 
