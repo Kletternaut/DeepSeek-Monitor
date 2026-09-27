@@ -19,7 +19,7 @@ Usage- und Kostendaten.
 ## Installation
 
 ```bash
-cd /home/admin/deepseek/deepseek-proxy
+cd ~/deepseek/deepseek-proxy
 python -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```

@@ -22,7 +22,7 @@ Dieses Repository bündelt zwei Komponenten zur Überwachung der DeepSeek-API-Nu
 ├── deepseek_rates_latest.py     # Symlink → deepseek_rates_v2.4.0.py (stabiler Startpfad)
 ├── deepseek_logo.png            # App-Icon (Fenster- und Desktop-Icon)
 ├── .env.example                 # Vorlage für App-Umgebungsvariablen (DEEPSEEK_API_KEY, DEEPSEEK_INFLUX_*, DEEPSEEK_PROXY_URL)
-├── .gitignore                   # Ausschlüsse (.copilot/, BACKUP/, DEVELOPMENT/, deepseek-cost-monitor/, .venv/, influx.env, ...)
+├── .gitignore                   # Ausschlüsse (siehe Datei selbst)
 │
 └── deepseek-proxy/
     ├── main.py                  # Standalone-Einstiegspunkt (Flags + Usage-Callback, --view = nur Tkinter-Ansicht)
@@ -54,15 +54,3 @@ Dieses Repository bündelt zwei Komponenten zur Überwachung der DeepSeek-API-Nu
         ├── test_influx_sink.py  # InfluxDB-Sink
         └── test_tkinter_view.py # Tkinter-Detailansicht
 ```
-
----
-
-## NICHT im Repo (nur lokal)
-
-| Pfad | Inhalt |
-|---|---|
-| `BACKUP/` | Altlasten (alte `deepseek_costs*`, `gpt5/`, `deepseek_v4_tokenizer/`, SVGs) |
-| `DEVELOPMENT/` | Screenshots / Entwicklungshilfen |
-| `.copilot/` | Chat-Zusammenfassungen, Downsampling-Skripte (nur lokal) |
-| `deepseek-cost-monitor/` | Fremdes Repo (Windows-Widget von `guanxingxing`), nicht Teil dieses Projekts |
-| `.venv/`, `__pycache__/`, `.history/` | Build-/Cache-Artefakte |

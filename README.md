@@ -53,8 +53,8 @@ zu tun".
 [Desktop Entry]
 Type=Application
 Name=DeepSeek Monitor
-Icon=/home/admin/deepseek/deepseek_logo.png
-Exec=env DISPLAY=:10.0 python3 /home/admin/deepseek/deepseek_rates_latest.py
+Icon=$HOME/deepseek/deepseek_logo.png
+Exec=env DISPLAY=:10.0 python3 $HOME/deepseek/deepseek_rates_latest.py
 Terminal=false
 ```
 

@@ -56,20 +56,20 @@ deepseek-proxy/
 ### `influx.env` (Secret, Rechte 0600)
 
 ```ini
-DEEPSEEK_INFLUX_URL=http://192.168.0.32:8086
+DEEPSEEK_INFLUX_URL=http://<INFLUX_HOST>:8086
 DEEPSEEK_INFLUX_TOKEN=<TOKEN>
-DEEPSEEK_INFLUX_ORG=Jolly
-DEEPSEEK_INFLUX_BUCKET=deepseek-usage
+DEEPSEEK_INFLUX_ORG=<ORG>
+DEEPSEEK_INFLUX_BUCKET=<BUCKET>
 # optional:
-# DEEPSEEK_INFLUX_HOST_NAME=raspi5
+# DEEPSEEK_INFLUX_HOST_NAME=<hostname>
 ```
 
 ### systemd-Unit (Auszug)
 
 ```ini
 [Service]
-ExecStart=/home/admin/deepseek/deepseek-proxy/.venv/bin/python /home/admin/deepseek/deepseek-proxy/main.py
-EnvironmentFile=-/home/admin/deepseek/deepseek-proxy/influx.env
+ExecStart=$HOME/deepseek/deepseek-proxy/.venv/bin/python $HOME/deepseek/deepseek-proxy/main.py
+EnvironmentFile=-$HOME/deepseek/deepseek-proxy/influx.env
 ```
 
 > Das führende `-` bei `EnvironmentFile=-...` bedeutet: kein Fehler, wenn die
@@ -85,11 +85,11 @@ EnvironmentFile=-/home/admin/deepseek/deepseek-proxy/influx.env
 
 ```bash
 .venv/bin/python main.py \
-  --influx-url http://192.168.0.32:8086 \
+  --influx-url http://<INFLUX_HOST>:8086 \
   --influx-token <TOKEN> \
-  --influx-org Jolly \
-  --influx-bucket deepseek-usage \
-  --host-name raspi5
+  --influx-org <ORG> \
+  --influx-bucket <BUCKET> \
+  --host-name <hostname>
 ```
 
 ### Nach Änderung
@@ -122,10 +122,10 @@ Empfohlene Werte:
 
 | Feld | Wert |
 |---|---|
-| URL | `http://192.168.0.32:8086` |
+| URL | `http://<INFLUX_HOST>:8086` |
 | Token | Influx-API-Token |
-| Organisation | `Jolly` |
-| Bucket | `deepseek-usage` |
+| Organisation | `<ORG>` |
+| Bucket | `<BUCKET>` |
 
 ### Priorität der Konfiguration
 
@@ -154,12 +154,11 @@ Im InfluxDB-Modus erscheint im Fenster „Kosten & Verbrauch" ein **Host-Dropdow
 
 ## 6. Downsampling (tägliche Aggregation, optional)
 
-> Die Flux-Skripte und die Anleitung hierzu liegen **nur lokal** unter
-> `.copilot/influx-downsampling/` (nicht im Repository).
+Ein Flux-Task aggregiert täglich die Rohdaten in einen Aggregat-Bucket.
 
 Kurzfassung:
-- Rohdaten-Bucket `deepseek-usage`: Retention **90 Tage**.
-- Aggregat-Bucket `deepseek-usage-daily` (Measurement `usage_daily`): Retention **unendlich**.
+- Rohdaten-Bucket: Retention **90 Tage**.
+- Aggregat-Bucket (Measurement `usage_daily`): Retention **unendlich**.
 - Ein Task aggregiert täglich `usage` → `usage_daily` (Summen je Host/Modell/Zone/Tag).
 
 Die Einrichtung erfolgt **manuell per SSH** (Passwort bleibt beim User); das
@@ -200,10 +199,10 @@ Flux-Skript und die Anleitung liegen bereit.
 2. Influx-Sink aktiv: `journalctl -u deepseek-proxy | grep "InfluxDB-Sink"`.
 3. Daten vorhanden:
    ```bash
-   curl -s -X POST "http://192.168.0.32:8086/api/v2/query?org=Jolly" \
+   curl -s -X POST "http://<INFLUX_HOST>:8086/api/v2/query?org=<ORG>" \
      -H "Authorization: Token <TOKEN>" -H "Accept: application/csv" \
      -H "Content-Type: application/json" \
-     -d '{"query":"from(bucket: \"deepseek-usage\") |> range(start: -1h) |> filter(fn: (r) => r._measurement == \"usage\") |> count()"}'
+     -d '{"query":"from(bucket: \"<BUCKET>\") |> range(start: -1h) |> filter(fn: (r) => r._measurement == \"usage\") |> count()"}'
    ```
 4. App starten → „C" (Kosten & Verbrauch) → Daten aus InfluxDB bzw. lokal.
 5. Tests: `cd deepseek-proxy && .venv/bin/python -m pytest -q` → 81 grün.

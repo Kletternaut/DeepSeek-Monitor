@@ -7,21 +7,14 @@ Diese Anleitung beschreibt, wie **Proxy** (`deepseek-proxy/`) und **Monitor**
 Verteilweg dient **GitHub** (Repository `Kletternaut/DeepSeek-Monitor`, Branch
 `main`) — kein `rsync`/`scp`.
 
-Bereits installiert (Stand 2026-09-27):
-
-| Host | Hostname | IP | Influx-`host`-Tag |
-|---|---|---|---|
-| raspi5 (Quelle) | raspi5 | 192.168.0.30 | raspi5 |
-| raspi6 | raspi6 | 192.168.0.72 | raspi6 |
-| raspi7 | raspi7 | 192.168.0.87 | raspi7 |
-
-Zentrale InfluxDB: `http://192.168.0.32:8086` (Org `Jolly`, Bucket `deepseek-usage`).
+Die zentrale InfluxDB wird über die Umgebungsvariablen `DEEPSEEK_INFLUX_*`
+konfiguriert (URL, Token, Organisation, Bucket).
 
 ---
 
 ## 1. Voraussetzungen
 
-- SSH-Zugang als `admin` (Passwort bleibt beim User).
+- SSH-Zugang als `<user>` (Passwort bleibt beim User).
 - Auf dem Zielhost: Python 3.10+ mit `venv` und `tkinter`, `git`, systemd.
   Prüfen:
 
@@ -33,7 +26,7 @@ Zentrale InfluxDB: `http://192.168.0.32:8086` (Org `Jolly`, Bucket `deepseek-usa
   ```
 
 - **Achtung pyenv:** Auf einigen Hosts zeigt `python3` auf einen
-  **pyenv-Shim** (`/home/admin/.pyenv/shims/python3`). Das funktioniert im
+  **pyenv-Shim** (`~/.pyenv/shims/python3`). Das funktioniert im
   Terminal, kann aber im Desktop-Kontext Probleme machen (siehe Abschnitt 3).
 
 ---
@@ -68,16 +61,16 @@ verteilt — auf jedem Host manuell anlegen:
 cd ~/deepseek/deepseek-proxy
 umask 077
 cat > influx.env <<'EOF'
-DEEPSEEK_INFLUX_URL=http://192.168.0.32:8086
+DEEPSEEK_INFLUX_URL=http://<INFLUX_HOST>:8086
 DEEPSEEK_INFLUX_TOKEN=<TOKEN>
-DEEPSEEK_INFLUX_ORG=Jolly
-DEEPSEEK_INFLUX_BUCKET=deepseek-usage
+DEEPSEEK_INFLUX_ORG=<ORG>
+DEEPSEEK_INFLUX_BUCKET=<BUCKET>
 EOF
 chmod 600 influx.env
 ```
 
 Optional `DEEPSEEK_INFLUX_HOST_NAME=<hostname>` setzen, sonst wird
-`socket.gethostname()` verwendet (→ automatisch `raspi6`, `raspi7`, …).
+`socket.gethostname()` verwendet.
 
 ### 2.4 Proxy: systemd-Service aktivieren
 
@@ -121,8 +114,8 @@ Version=1.5
 Type=Application
 Name=DeepSeek Monitor
 Comment=DeepSeek API Kosten- & Verbrauchs-Monitor
-Icon=/home/admin/deepseek/deepseek_logo.png
-Exec=env DISPLAY=:10.0 python3 /home/admin/deepseek/deepseek_rates_latest.py
+Icon=$HOME/deepseek/deepseek_logo.png
+Exec=env DISPLAY=:10.0 python3 $HOME/deepseek/deepseek_rates_latest.py
 Terminal=false
 Categories=Utility;
 EOF
@@ -145,8 +138,8 @@ Version=1.5
 Type=Application
 Name=DeepSeek
 Comment=DeepSeek API Kosten- & Verbrauchs-Monitor
-Icon=/home/admin/deepseek/deepseek_logo.png
-Exec=env DISPLAY=:10.0 python3 /home/admin/deepseek/deepseek_rates_latest.py
+Icon=$HOME/deepseek/deepseek_logo.png
+Exec=env DISPLAY=:10.0 python3 $HOME/deepseek/deepseek_rates_latest.py
 Terminal=false
 Categories=Utility;
 EOF
@@ -156,8 +149,8 @@ chmod +x ~/Desktop/deepseek.desktop
 Referenzen prüfen (müssen existieren):
 
 ```bash
-ls -la /home/admin/deepseek/deepseek_rates_latest.py   # Symlink -> v2.4.0
-ls -la /home/admin/deepseek/deepseek_logo.png
+ls -la ~/deepseek/deepseek_rates_latest.py   # Symlink -> v2.4.0
+ls -la ~/deepseek/deepseek_logo.png
 ```
 
 ---

@@ -8,7 +8,7 @@
 - Neues `host`-Tag (Hostname via `--host-name` bzw. `DEEPSEEK_INFLUX_HOST_NAME`), damit mehrere Entwicklungs-Hosts unterscheidbar sind.
 - Neues Feld `requests` (Wert 1) pro Event für spätere Tagesaggregation.
 - Dependency `influxdb-client` ergänzt.
-- Downsampling-Konzept vorbereitet: tägliche Aggregation (Flux-Task) unter `.copilot/influx-downsampling/`.
+- Downsampling-Konzept vorbereitet: tägliche Aggregation über einen Flux-Task.
 - **Host-Filter** in der Detailseite (Dropdown „Host"), sichtbar nur im InfluxDB-Modus; listet alle Hosts und filtert die Daten je Host („Alle Hosts" = aggregiert über alle).
 - **GUI-Schalter „Datenquelle"** in den Einstellungen: umschalten zwischen „Lokal (Proxy/SQLite)" und „InfluxDB (zentral)" inkl. Eingabefeldern für URL/Token/Org/Bucket. Die Werte werden lokal in `~/.config/deepseek/influx_config` (Datei `0600`) persistiert; ohne GUI-Eintrag greifen weiterhin die Env-Variablen `DEEPSEEK_INFLUX_*`.
 
