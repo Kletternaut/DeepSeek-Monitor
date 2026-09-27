@@ -4,8 +4,8 @@
 
 Diese Anleitung beschreibt, wie **Proxy** (`deepseek-proxy/`) und **Monitor**
 (`deepseek_rates_latest.py`) auf einem neuen Host installiert werden. Als
-Verteilweg dient **GitHub** (Repository `Kletternaut/DeepSeek`, Branch
-`realtime-cost-monitor`) — kein `rsync`/`scp`.
+Verteilweg dient **GitHub** (Repository `Kletternaut/DeepSeek-Monitor`, Branch
+`main`) — kein `rsync`/`scp`.
 
 Bereits installiert (Stand 2026-09-27):
 
@@ -47,7 +47,7 @@ cd ~
 if [ -d deepseek ] && [ ! -d deepseek/.git ]; then
     mv deepseek deepseek.old-$(date +%Y%m%d%H%M%S)
 fi
-git clone --branch realtime-cost-monitor https://github.com/Kletternaut/DeepSeek.git deepseek
+git clone --branch main https://github.com/Kletternaut/DeepSeek-Monitor.git deepseek
 ```
 
 ### 2.2 Proxy: venv + Abhängigkeiten
