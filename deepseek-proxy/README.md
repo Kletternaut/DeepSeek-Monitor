@@ -1,20 +1,23 @@
 # DeepSeek Anthropic Proxy
 
-Ein schlanker **Streaming-Proxy** zwischen VS Code (Anthropic Messages API) und
-DeepSeek. Der Proxy stellt die Endpunkte `POST /anthropic/v1/messages` und
-`POST /v1/messages` bereit, reicht Requests **bytegenau und unverändert** an
-`https://api.deepseek.com/anthropic/v1/messages` weiter und streamt die Antwort
-(Server-Sent-Events) unverändert zurück.
+> **Note:** This project is an independent open-source project and is in **no
+> way affiliated with DeepSeek (深度求索)**. It is not developed, sponsored,
+> endorsed, or operated by DeepSeek.
 
-Neben dem Transport läuft eine entkoppelte **Token-Usage-Überwachung**: eine
-Kopie jedes Upstream-Chunks wird inkrementell geparst, die `usage`-Objekte
-zusammengeführt und in SQLite persistiert. Ein **Web-Dashboard** zeigt echte
-Usage- und Kostendaten.
+A slim **streaming proxy** between VS Code (Anthropic Messages API) and
+DeepSeek. The proxy exposes the endpoints `POST /anthropic/v1/messages` and
+`POST /v1/messages`, forwards requests **byte-exact and unchanged** to
+`https://api.deepseek.com/anthropic/v1/messages`, and streams the response
+(Server-Sent Events) back unchanged.
 
-## Voraussetzungen
+Alongside the transport runs a decoupled **token usage monitor**: a copy of
+every upstream chunk is parsed incrementally, the `usage` objects are merged and
+persisted in SQLite. A **web dashboard** shows real usage and cost data.
+
+## Prerequisites
 
 - Python 3.10+
-- Linux (z. B. Raspberry Pi OS)
+- Linux (e.g. Raspberry Pi OS)
 
 ## Installation
 
@@ -30,49 +33,49 @@ python -m venv .venv
 .venv/bin/python main.py
 ```
 
-Optionen:
+Options:
 
-| Option           | Default                                          | Beschreibung                     |
+| Option           | Default                                          | Description                      |
 | ---------------- | ------------------------------------------------ | -------------------------------- |
-| `--host`         | `127.0.0.1`                                       | Bind-Adresse                     |
-| `--port`         | `8000`                                            | Bind-Port                        |
-| `--upstream`     | `https://api.deepseek.com/anthropic/v1/messages`  | Upstream-URL der DeepSeek-API    |
-| `--db`           | Storage-Standardpfad                              | Pfad zur SQLite-Datenbank        |
-| `--no-dashboard` | aus                                               | Web-Dashboard nicht registrieren |
+| `--host`         | `127.0.0.1`                                       | Bind address                     |
+| `--port`         | `8000`                                            | Bind port                        |
+| `--upstream`     | `https://api.deepseek.com/anthropic/v1/messages`  | Upstream URL of the DeepSeek API |
+| `--db`           | storage default path                             | Path to the SQLite database      |
+| `--no-dashboard` | off                                              | Do not register the web dashboard |
 
-Beenden mit `Strg+C` (SIGINT) oder SIGTERM — der Server fährt sauber herunter.
+Stop with `Ctrl+C` (SIGINT) or SIGTERM — the server shuts down cleanly.
 
-## VS Code einrichten
+## Set up VS Code
 
-Als **Custom Endpoint** in VS Code konfigurieren:
+Configure as a **custom endpoint** in VS Code:
 
 - `apiType = "messages"`
-- **Base-URL**: `http://127.0.0.1:8000`
+- **Base URL**: `http://127.0.0.1:8000`
 
-Der Proxy löst den Pfad `/anthropic/v1/messages` auf. Der **API-Key wird im
-VS-Code-Custom-Endpoint konfiguriert** und vom Proxy transparent per Header
-(`x-api-key`) durchgereicht — der Proxy erzeugt oder speichert keinen eigenen
-API-Key.
+The proxy resolves the path `/anthropic/v1/messages`. The **API key is
+configured in the VS Code custom endpoint** and passed through transparently by
+the proxy via header (`x-api-key`) — the proxy creates or stores no API key of
+its own.
 
 ## Dashboard
 
-Im Browser öffnen:
+Open in the browser:
 
 ```
 http://127.0.0.1:8000/
 ```
 
-Zeigt real aufgezeichnete Token-Nutzung und daraus berechnete Kosten.
+Shows real recorded token usage and the costs calculated from it.
 
-## Daten
+## Data
 
-SQLite-Datenbank unter:
+SQLite database at:
 
 ```
 ~/.local/state/deepseek/usage.db
 ```
 
-Der Pfad kann über `--db` überschrieben werden.
+The path can be overridden via `--db`.
 
 ## Tests
 
@@ -82,7 +85,7 @@ Der Pfad kann über `--db` überschrieben werden.
 
 ## systemd
 
-Die mitgelieferte Unit `deepseek-proxy.service` startet den Proxy beim Booten:
+The bundled unit `deepseek-proxy.service` starts the proxy at boot:
 
 ```bash
 sudo cp deepseek-proxy.service /etc/systemd/system/
@@ -90,21 +93,21 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now deepseek-proxy
 ```
 
-## Projektstruktur
+## Project structure
 
 ```
 deepseek-proxy/
-├── main.py                     # Standalone-Einstiegspunkt
-├── deepseek-proxy.service      # systemd-Unit
+├── main.py                     # standalone entry point
+├── deepseek-proxy.service      # systemd unit
 ├── requirements.txt
 ├── proxy/
-│   ├── server.py               # Streaming-Proxy (FastAPI + uvicorn + httpx)
+│   ├── server.py               # streaming proxy (FastAPI + uvicorn + httpx)
 │   ├── usage.py                # TokenUsage + merge_usage
-│   ├── sse.py                  # Inkrementeller SSE-Parser
-│   ├── storage.py              # SQLite-Persistenz
-│   ├── dashboard.py            # Web-Dashboard-Routen
-│   ├── pricing.py              # Preise / Peak-Erkennung
-│   ├── cost_calc.py            # Kostenberechnung
-│   └── labels.py               # Key-Labels / Fingerprints
-└── tests/                      # pytest-Suite
+│   ├── sse.py                  # incremental SSE parser
+│   ├── storage.py              # SQLite persistence
+│   ├── dashboard.py            # web dashboard routes
+│   ├── pricing.py              # prices / peak detection
+│   ├── cost_calc.py            # cost calculation
+│   └── labels.py               # key labels / fingerprints
+└── tests/                      # pytest suite
 ```

@@ -1,9 +1,11 @@
 # systemd-System-Unit für den DeepSeek-Anthropic-Proxy.
 #
 # Installation (als root bzw. mit sudo):
-#   sudo cp /home/admin/deepseek/deepseek-proxy/deepseek-proxy.service /etc/systemd/system/
-#   sudo systemctl daemon-reload
-#   sudo systemctl enable --now deepseek-proxy
+#   1. Pfade in dieser Unit an deine Umgebung anpassen (User, Group,
+#      WorkingDirectory, ExecStart, EnvironmentFile).
+#   2. sudo cp deepseek-proxy.service /etc/systemd/system/
+#   3. sudo systemctl daemon-reload
+#   4. sudo systemctl enable --now deepseek-proxy
 #
 # Status / Logs:
 #   systemctl status deepseek-proxy
@@ -19,14 +21,16 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=admin
-Group=admin
-WorkingDirectory=/home/admin/deepseek/deepseek-proxy
-ExecStart=/home/admin/deepseek/deepseek-proxy/.venv/bin/python /home/admin/deepseek/deepseek-proxy/main.py
+# Service-Benutzer (anpassen bzw. mit `sudo useradd -r deepseek-proxy` anlegen).
+User=deepseek-proxy
+Group=deepseek-proxy
+# Installationsort des Projekts (anpassen).
+WorkingDirectory=/opt/deepseek-monitor/deepseek-proxy
+ExecStart=/opt/deepseek-monitor/deepseek-proxy/.venv/bin/python /opt/deepseek-monitor/deepseek-proxy/main.py
 Environment=PYTHONUNBUFFERED=1
-# Optionale InfluxDB-Konfiguration (DEEPSEEK_INFLUX_*) -- Datei liegt mit 0600
-# berechtigt neben der Unit und enthält das Token (nicht committen).
-EnvironmentFile=-/home/admin/deepseek/deepseek-proxy/influx.env
+# Optionale InfluxDB-Konfiguration (DEEPSEEK_INFLUX_*). Die Datei enthält ein
+# Token, daher mit 0600 ablegen und NICHT committen.
+EnvironmentFile=-/etc/deepseek-monitor/influx.env
 Restart=on-failure
 RestartSec=5
 

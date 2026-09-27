@@ -1,32 +1,33 @@
 #!/usr/bin/env python3
 """
-Validierungs-Skript: vergleicht die vom Proxy erfassten Token/Kosten mit den
-offiziellen DeepSeek-Ground-Truth-Quellen.
+Validation script: compares the tokens/cost recorded by the proxy with the
+official DeepSeek ground-truth sources.
 
-Zwei Ground-Truth-Quellen:
-1. Usage-Seite  (https://platform.deepseek.com/usage)  -> exakte Token-Zahl
-2. Balance-API  (/user/balance)                        -> exaktes Guthaben
+Two ground-truth sources:
+1. Usage page  (https://platform.deepseek.com/usage)  -> exact token count
+2. Balance API  (/user/balance)                        -> exact credit
 
-Aufruf:
-  .venv/bin/python validation_test.py --balance   # aktuellen Stand ausgeben
-  .venv/bin/python validation_test.py --request   # 1 kontrollierten Request senden
+Invocation:
+  .venv/bin/python validation_test.py --balance   # print current state
+  .venv/bin/python validation_test.py --request   # send 1 controlled request
 
-Der API-Key wird aus ~/.config/deepseek/api_key gelesen und NIE ausgegeben.
+The API key is read from ~/.config/deepseek/api_key and NEVER printed.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sqlite3
 import sys
 import time
 import urllib.request
 
-KEY_FILE = "/home/admin/.config/deepseek/api_key"
+KEY_FILE = os.path.expanduser("~/.config/deepseek/api_key")
 PROXY_URL = "http://127.0.0.1:8000/anthropic/v1/messages"
 BALANCE_URL = "https://api.deepseek.com/user/balance"
-DB_PATH = "/home/admin/.local/state/deepseek/usage.db"
+DB_PATH = os.path.expanduser("~/.local/state/deepseek/usage.db")
 
 
 def read_key() -> str:
@@ -35,7 +36,7 @@ def read_key() -> str:
 
 
 def get_balance() -> tuple[float, str]:
-    """Liefert (total_balance, currency) aus der Balance-API."""
+    """Return (total_balance, currency) from the balance API."""
     req = urllib.request.Request(
         BALANCE_URL,
         headers={"Authorization": f"Bearer {read_key()}", "Accept": "application/json"},
@@ -47,10 +48,10 @@ def get_balance() -> tuple[float, str]:
 
 
 def db_totals() -> dict:
-    """Summiert alle erfassten Usage-Events (Token + daraus Kosten)."""
+    """Sum all recorded usage events (tokens + costs derived from them)."""
     import sys as _sys
 
-    _sys.path.insert(0, "/home/admin/deepseek/deepseek-proxy")
+    _sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from proxy.cost_calc import calc_usage_cost
     from proxy.pricing import load_pricing
     from proxy.storage import Storage, row_to_usage
@@ -79,18 +80,18 @@ def db_totals() -> dict:
 
 
 def send_controlled_request() -> dict:
-    """Sendet EINEN eindeutigen Request durch den Proxy (kein Cache-Hit)."""
+    """Send ONE unique request through the proxy (no cache hit)."""
     import sys as _sys
 
-    _sys.path.insert(0, "/home/admin/deepseek/deepseek-proxy")
+    _sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from proxy.cost_calc import calc_usage_cost
     from proxy.pricing import load_pricing
     from proxy.storage import Storage, row_to_usage
 
-    # Eindeutiger Prompt -> garantiert Cache-Miss = input, kein Cache-Hit.
+    # Unique prompt -> guarantees cache miss = input, no cache hit.
     prompt = (
-        f"Validierungstest um {time.strftime('%H:%M:%S')}. "
-        "Beantworte nur mit dem Wort: OK"
+        f"Validation test at {time.strftime('%H:%M:%S')}. "
+        "Reply only with the word: OK"
     )
     body = {
         "model": "deepseek-flash",
@@ -111,7 +112,7 @@ def send_controlled_request() -> dict:
     with urllib.request.urlopen(req, timeout=60) as resp:
         resp.read()
 
-    # Kurz warten, damit der Callback den Eintrag geschrieben hat.
+    # Wait briefly so the callback writes the entry.
     time.sleep(1.0)
 
     storage = Storage(DB_PATH)
@@ -130,52 +131,52 @@ def send_controlled_request() -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--balance", action="store_true", help="aktuellen Stand ausgeben")
-    group.add_argument("--request", action="store_true", help="1 kontrollierten Request senden")
+    group.add_argument("--balance", action="store_true", help="print current state")
+    group.add_argument("--request", action="store_true", help="send 1 controlled request")
     args = parser.parse_args()
 
     if args.balance:
         bal, cur = get_balance()
         t = db_totals()
-        print("=== AKTUELLER STAND ===")
-        print(f"Guthaben (DeepSeek):   {bal:.2f} {cur}")
-        print(f"Proxy erfasste Events: {t['requests']}  (id {t['first_id']}..{t['last_id']})")
-        print(f"  Input (Cache-Miss):  {t['input']:,}")
-        print(f"  Cache-Read (Hit):    {t['cache_read']:,}")
+        print("=== CURRENT STATE ===")
+        print(f"Balance (DeepSeek):    {bal:.2f} {cur}")
+        print(f"Proxy recorded events: {t['requests']}  (id {t['first_id']}..{t['last_id']})")
+        print(f"  Input (cache miss):  {t['input']:,}")
+        print(f"  Cache-read (hit):    {t['cache_read']:,}")
         print(f"  Output:              {t['output']:,}")
-        print(f"  Token gesamt:        {t['input'] + t['cache_read'] + t['output']:,}")
-        print(f"  Kosten (berechnet):  ${t['cost_usd']:.6f}")
+        print(f"  Total tokens:        {t['input'] + t['cache_read'] + t['output']:,}")
+        print(f"  Cost (calculated):   ${t['cost_usd']:.6f}")
         print()
-        print("=> Vergleiche 'Token gesamt' mit der Delta-Zahl auf "
+        print("=> Compare 'total tokens' with the delta number on "
               "platform.deepseek.com/usage")
-        print("=> Vergleiche 'Kosten' mit dem Guthaben-Delta (beachte USD vs. Währung)")
+        print("=> Compare 'cost' with the balance delta (note USD vs. currency)")
 
     elif args.request:
-        print("=== KONTROLLIERTER REQUEST (vorher) ===")
+        print("=== CONTROLLED REQUEST (before) ===")
         bal_before, cur = get_balance()
         t_before = db_totals()
-        print(f"Guthaben: {bal_before:.2f} {cur}")
-        print(f"Proxy-Events vorher: {t_before['requests']}")
+        print(f"Balance: {bal_before:.2f} {cur}")
+        print(f"Proxy events before: {t_before['requests']}")
 
-        print("=== Sende 1 eindeutigen Request durch den Proxy ... ===")
+        print("=== Sending 1 unique request through the proxy ... ===")
         r = send_controlled_request()
 
-        print("=== NACH dem Request ===")
+        print("=== AFTER the request ===")
         bal_after, _ = get_balance()
         t_after = db_totals()
-        print(f"Erfasster Request ({r['timestamp']}):")
-        print(f"  Input (Miss):  {r['input']:,}")
-        print(f"  Cache-Read:    {r['cache_read']:,}")
+        print(f"Recorded request ({r['timestamp']}):")
+        print(f"  Input (miss):  {r['input']:,}")
+        print(f"  Cache-read:    {r['cache_read']:,}")
         print(f"  Output:        {r['output']:,}")
-        print(f"  Token gesamt:  {r['input'] + r['cache_read'] + r['output']:,}")
-        print(f"  Kosten:        ${r['cost_usd']:.8f}")
-        print(f"Proxy-Events nachher: {t_after['requests']} "
+        print(f"  Total tokens:  {r['input'] + r['cache_read'] + r['output']:,}")
+        print(f"  Cost:          ${r['cost_usd']:.8f}")
+        print(f"Proxy events after: {t_after['requests']} "
               f"(+{t_after['requests'] - t_before['requests']})")
-        print(f"Guthaben: {bal_after:.2f} {cur} "
-              f"(Delta: {bal_before - bal_after:.2f} {cur})")
+        print(f"Balance: {bal_after:.2f} {cur} "
+              f"(delta: {bal_before - bal_after:.2f} {cur})")
         print()
-        print("=> Token-Delta auf der Usage-Seite mit 'Token gesamt' vergleichen.")
-        print("=> Einzel-Request-Kosten sind im Guthaben (2 Dezimalen) i.d.R. unsichtbar.")
+        print("=> Compare the token delta on the usage page with 'total tokens'.")
+        print("=> Single-request costs are usually invisible in the balance (2 decimals).")
 
     return 0
 

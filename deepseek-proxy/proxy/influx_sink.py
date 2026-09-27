@@ -1,23 +1,23 @@
-"""Optionaler InfluxDB-2.x-Sink für Token-Usage-Events.
+"""Optional InfluxDB 2.x sink for token usage events.
 
-Dieses Modul ergänzt die lokale SQLite-Persistenz um einen **best-effort**
-Schreibweg in eine zentrale InfluxDB 2.x. Es ist vollständig entkoppelt vom
-eigentlichen Streaming: :class:`InfluxSink` wird (analog zu
-``storage.save_usage``) als zusätzlicher ``usage_callback`` registriert.
+This module complements the local SQLite persistence with a **best-effort**
+write path into a central InfluxDB 2.x. It is fully decoupled from the actual
+streaming: :class:`InfluxSink` is registered as an additional ``usage_callback``
+(analogous to ``storage.save_usage``).
 
 Design:
 
-* Keine harten Abhängigkeiten beim Import: ``influxdb-client`` wird **lazy**
-  importiert, damit der Proxy auch ohne installierte Library startet.
-* Schreiben erfolgt gepuffert (``SYNCHRONOUS`` write_api); Fehler werden
-  geloggt, brechen aber niemals den Request-Stream.
-* Ein ``host``-Tag (Hostname, per Konstruktor überschreibbar) macht die
-  Usage mehrerer Entwicklungs-Hosts unterscheidbar.
+* No hard import dependencies: ``influxdb-client`` is imported **lazily**, so
+the proxy also starts without the installed library.
+* Writing is buffered (``SYNCHRONOUS`` write_api); errors are logged but never
+  break the request stream.
+* A ``host`` tag (hostname, overridable via the constructor) makes the usage of
+  multiple development hosts distinguishable.
 
-Konfiguration ausschließlich über Parameter/Umgebungsvariablen -- es werden
-keine Zugangsdaten im Code hinterlegt.
+Configuration exclusively via parameters/environment variables -- no credentials
+are hardcoded in the code.
 
-Öffentliche Symbole:
+Public symbols:
     * :class:`InfluxSink`
 """
 
@@ -36,20 +36,20 @@ logger = logging.getLogger("deepseek_proxy.influx_sink")
 
 __all__ = ["InfluxSink"]
 
-#: Measurement-Name in InfluxDB.
+#: Measurement name in InfluxDB.
 _MEASUREMENT = "usage"
 
 
 class InfluxSink:
-    """Puffert :class:`TokenUsage`-Events und schreibt sie in InfluxDB 2.x.
+    """Buffer :class:`TokenUsage` events and write them to InfluxDB 2.x.
 
-    Parameter:
-        url: InfluxDB-2.x-Basis-URL (z. B. ``http://192.168.0.32:8086``).
-        token: API-Token mit Schreib-/Leserecht auf ``bucket``.
-        org: Organisationsname.
-        bucket: Ziel-Bucket.
-        host_name: Wert für das ``host``-Tag. Default: ``socket.gethostname()``.
-        pricing: Optionale Preis-Tabelle; Default: aus :func:`load_pricing`.
+    Parameters:
+        url: InfluxDB 2.x base URL (e.g. ``http://<INFLUX_HOST>:8086``).
+        token: API token with write/read permission on ``bucket``.
+        org: Organization name.
+        bucket: Target bucket.
+        host_name: Value for the ``host`` tag. Default: ``socket.gethostname()``.
+        pricing: Optional price table; default: from :func:`load_pricing`.
     """
 
     def __init__(
@@ -76,19 +76,19 @@ class InfluxSink:
             self._client, self._write_api = self._connect()
         else:
             logger.warning(
-                "InfluxSink deaktiviert (unvollständige Konfiguration: "
-                "url/token/org/bucket fehlt)."
+                "InfluxSink disabled (incomplete configuration: "
+                "url/token/org/bucket missing)."
             )
 
     # ------------------------------------------------------------- connection
     def _connect(self) -> tuple[Any, Any]:
-        """Öffnet Client + gepufferten synchronen Write-Weg (lazy import)."""
+        """Open client + buffered synchronous write path (lazy import)."""
         try:
             from influxdb_client import InfluxDBClient
             from influxdb_client.client.write_api import SYNCHRONOUS
-        except ImportError as exc:  # pragma: no cover - abhängig von Install
+        except ImportError as exc:  # pragma: no cover - depends on install
             logger.warning(
-                "influxdb-client nicht installiert -- InfluxSink deaktiviert (%s)",
+                "influxdb-client not installed -- InfluxSink disabled (%s)",
                 exc,
             )
             self._enabled = False
@@ -100,7 +100,7 @@ class InfluxSink:
 
     # ------------------------------------------------------------------- write
     def write(self, usage: TokenUsage) -> None:
-        """Schreibt ein einzelnes Usage-Event (best effort, nie werfen)."""
+        """Write a single usage event (best effort, never raise)."""
         if not self._enabled or self._write_api is None:
             return
 
@@ -111,11 +111,11 @@ class InfluxSink:
                 org=self.org,
                 record=point,
             )
-        except Exception:  # noqa: BLE001 - Sink darf den Stream nie brechen
-            logger.exception("Fehler beim InfluxDB-Schreiben (Event verworfen)")
+        except Exception:  # noqa: BLE001 - sink must never break the stream
+            logger.exception("Error writing to InfluxDB (event discarded)")
 
     def _to_point(self, usage: TokenUsage) -> Any:
-        """Baut aus einem :class:`TokenUsage` einen InfluxDB-Point."""
+        """Build an InfluxDB point from a :class:`TokenUsage`."""
         from influxdb_client import Point
 
         tariff = "peak" if is_peak(usage.timestamp) else "off_peak"
@@ -141,24 +141,24 @@ class InfluxSink:
 
     @staticmethod
     def _parse_timestamp(timestamp_iso: str) -> datetime:
-        """Parst den Berlin-ISO-Zeitstempel zu einem tz-aware ``datetime``."""
+        """Parse the Berlin ISO timestamp to a tz-aware ``datetime``."""
         try:
             parsed = datetime.fromisoformat(timestamp_iso)
             if parsed.tzinfo is None:
-                # Naive Zeitstempel als UTC interpretieren (konsistent zu pricing).
+                # Interpret naive timestamps as UTC (consistent with pricing).
                 from datetime import timezone
 
                 parsed = parsed.replace(tzinfo=timezone.utc)
             return parsed
         except (TypeError, ValueError):
-            # Fallback: aktuelle Zeit (best effort, Event nicht verlieren).
+            # Fallback: current time (best effort, do not lose the event).
             return datetime.now().astimezone()
 
     # ------------------------------------------------------------------- close
     def close(self) -> None:
-        """Schließt den Client und flusht den Puffer."""
+        """Close the client and flush the buffer."""
         if self._client is not None:
             try:
                 self._client.close()
-            except Exception:  # noqa: BLE001 - defensiv
-                logger.debug("Fehler beim Schließen des InfluxDB-Clients", exc_info=True)
+            except Exception:  # noqa: BLE001 - defensive
+                logger.debug("Error closing the InfluxDB client", exc_info=True)

@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""End-to-End-Test: echter Request DURCH den lokalen Proxy.
+"""End-to-end test: real request THROUGH the local proxy.
 
-Liest den Key aus ~/.config/deepseek/api_key (nie ausgegeben), sendet den
-Request an http://127.0.0.1:18999/anthropic/v1/messages und vergleicht die
-gestreamte Antwort mit der direkten Upstream-Antwort. Anschließend wird die
-SQLite-DB auf den gespeicherten Usage-Eintrag geprüft.
+Reads the key from ~/.config/deepseek/api_key (never printed), sends the
+request to http://127.0.0.1:18999/anthropic/v1/messages and compares the
+streamed response with the direct upstream response. Then the SQLite DB is
+checked for the stored usage entry.
 """
 
 import json
+import os
 import sqlite3
 import sys
 import urllib.request
 
-KEY_FILE = "/home/admin/.config/deepseek/api_key"
+KEY_FILE = os.path.expanduser("~/.config/deepseek/api_key")
 PROXY_URL = "http://127.0.0.1:18999/anthropic/v1/messages"
 DB_PATH = "/tmp/ds_e2e.db"
 
@@ -27,7 +28,7 @@ def _request(url: str) -> tuple[str, bytes]:
         "model": "deepseek-flash",
         "max_tokens": 16,
         "stream": True,
-        "messages": [{"role": "user", "content": "Antworte mit: OK"}],
+        "messages": [{"role": "user", "content": "Reply with: OK"}],
     }
     req = urllib.request.Request(
         url,
@@ -45,7 +46,7 @@ def _request(url: str) -> tuple[str, bytes]:
 
 def _usage_from_sse(raw: bytes) -> dict:
     text = raw.decode("utf-8", errors="replace")
-    # Letztes usage-Objekt gewinnt (message_delta).
+    # The last usage object wins (message_delta).
     last = {}
     for line in text.splitlines():
         line = line.strip()
@@ -61,25 +62,25 @@ def _usage_from_sse(raw: bytes) -> dict:
 
 
 def main() -> int:
-    print("== 1) Direkt (Upstream) ==")
+    print("== 1) Direct (upstream) ==")
     ct_up, raw_up = _request("https://api.deepseek.com/anthropic/v1/messages")
     print(f"    Content-Type: {ct_up}, Bytes: {len(raw_up)}")
     usage_up = _usage_from_sse(raw_up)
     print(f"    usage: {json.dumps(usage_up, sort_keys=True)}")
 
-    print("== 2) Durch den Proxy ==")
+    print("== 2) Through the proxy ==")
     ct_px, raw_px = _request(PROXY_URL)
     print(f"    Content-Type: {ct_px}, Bytes: {len(raw_px)}")
     usage_px = _usage_from_sse(raw_px)
     print(f"    usage: {json.dumps(usage_px, sort_keys=True)}")
 
-    # 3) Vergleich: Antwort-Struktur (usage) muss identisch sein.
-    #    Der rohe Stream enthält zufällige IDs -> wir vergleichen nur usage.
+    # 3) Comparison: the response structure (usage) must be identical.
+    #    The raw stream contains random IDs -> we only compare usage.
     ok = usage_up == usage_px
-    print(f"== 3) usage identisch: {ok} ==")
+    print(f"== 3) usage identical: {ok} ==")
 
-    # 4) DB-Check: hat der Proxy den Usage-Eintrag gespeichert?
-    print("== 4) SQLite-Check ==")
+    # 4) DB check: did the proxy save the usage entry?
+    print("== 4) SQLite check ==")
     conn = sqlite3.connect(DB_PATH)
     rows = conn.execute(
         "SELECT api_key_fingerprint, model, input_tokens, output_tokens, "
@@ -92,9 +93,9 @@ def main() -> int:
         print(f"    fingerprint={fp[:16]}… model={model}")
         print(f"    input={it} output={ot} cache_create={cc} cache_read={cr} total={tt}")
         match = (it == usage_px.get("input_tokens") and ot == usage_px.get("output_tokens"))
-        print(f"    Token-Werte stimmen mit Stream überein: {match}")
+        print(f"    Token values match the stream: {match}")
     else:
-        print("    KEIN Eintrag gefunden (Proxy hat nichts gespeichert!)")
+        print("    NO entry found (proxy saved nothing!)")
 
     return 0 if ok else 1
 

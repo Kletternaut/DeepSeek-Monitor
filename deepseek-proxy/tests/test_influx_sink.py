@@ -1,12 +1,13 @@
-"""Tests für den InfluxDB-Sink (Schreiben) und die Influx-Read-Helfer.
+"""Tests for the InfluxDB sink (writing) and the Influx read helpers.
 
-Die Read-Helfer (Flux-CSV-Parser + Event-Mapping) sind reine Funktionen und
-werden ohne Netzwerk getestet. Der Sink wird mit einem gemockten
-``influxdb_client`` getestet, damit keine echte Verbindung nötig ist.
+The read helpers (Flux CSV parser + event mapping) are pure functions and are
+tested without network. The sink is tested with a mocked
+``influxdb_client`` so no real connection is needed.
 """
 
 from __future__ import annotations
 
+import os
 import sys
 from types import ModuleType
 from unittest import mock
@@ -19,30 +20,19 @@ from proxy.usage import TokenUsage
 # ---------------------------------------------------------------------------
 
 def _load_read_helpers() -> tuple:
-    """Lädt die reinen Read-Funktionen aus der App-Datei (ohne Tkinter)."""
-    # Die App importiert tkinter -- wir stubs die GUI-Module, um nur die
-    # reinen Funktionen (Parser/Mapping) zu testen.
-    import importlib.util
-
-    fake_tk = ModuleType("tkinter")
-    fake_ttk = ModuleType("tkinter.ttk")
-    fake_msg = ModuleType("tkinter.messagebox")
-    sys.modules["tkinter"] = fake_tk
-    sys.modules["tkinter.ttk"] = fake_ttk
-    sys.modules["tkinter.messagebox"] = fake_msg
-
-    spec = importlib.util.spec_from_file_location(
-        "deepseek_rates_app",
-        "/home/admin/deepseek/deepseek_rates_v2.4.0.py",
+    """Load the pure read functions from deepseek_monitor.analytics."""
+    repo_root = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..")
     )
-    module = importlib.util.module_from_spec(spec)
-    try:
-        spec.loader.exec_module(module)  # type: ignore
-    except Exception:
-        # tkinter-Stub reicht evtl. nicht; Funktionen trotzdem separat testen.
-        pass
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
 
-    return module._parse_flux_annotated_csv, module._flux_row_to_event  # type: ignore
+    from deepseek_monitor.analytics import (
+        _flux_row_to_event,
+        _parse_flux_annotated_csv,
+    )
+
+    return _parse_flux_annotated_csv, _flux_row_to_event
 
 
 def _parse_csv():
@@ -153,10 +143,10 @@ def test_influx_sink_to_point_with_mocked_client():
     sink = InfluxSink(
         url="http://x:8086", token="t", org="o", bucket="b", host_name="raspi5"
     )
-    sink._enabled = False  # kein echter Client nötig
+    sink._enabled = False  # no real client needed
 
     # ``_to_point`` importiert ``Point`` lazy aus ``influxdb_client`` und
-    # verknüpft Aufrufe (`.tag().tag()...field().time()`). Ein simpler Recorder
+    # chains calls (`.tag().tag()...field().time()`). A simple recorder
     # spiegelt diese Kette und sammelt die Aufrufe.
     class Recorder:
         def __init__(self, measurement=None):

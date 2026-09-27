@@ -1,8 +1,8 @@
-"""Tests für TokenUsage-Modell und Usage-Extraktion aus dem echten SSE-Parser.
+"""Tests for the TokenUsage model and usage extraction from the real SSE parser.
 
-Die Tests dürfen den echten SSE-Parser nicht umgehen: SSE-Bytes werden durch
-:class:`proxy.sse.SSEParser` gefüttert, die ``data``-Zeilen mit ``json.loads``
-geparst und dann mit ``proxy.usage`` ausgewertet — exakt wie im Proxy-Lauf.
+The tests must not bypass the real SSE parser: SSE bytes are fed through
+:class:`proxy.sse.SSEParser`, the ``data`` lines are parsed with ``json.loads``
+and then evaluated with ``proxy.usage`` — exactly as in a proxy run.
 """
 
 import json
@@ -20,7 +20,7 @@ from proxy.usage import (
 
 
 def _parse_stream(payload: bytes):
-    """Führt die vollständige Pipeline aus: SSE -> JSON-Events -> usage-merge."""
+    """Run the full pipeline: SSE -> JSON events -> usage merge."""
     events = []
     parser = SSEParser(on_event=lambda n, d: events.append((n, d)))
     parser.feed(payload)
@@ -28,7 +28,7 @@ def _parse_stream(payload: bytes):
     for name, data in events:
         if data is None:
             continue
-        obj = json.loads(data)  # hier kann ungültiges JSON auffliegen
+        obj = json.loads(data)  # invalid JSON can surface here
         merge_usage(obj, result)
     return result
 
@@ -93,7 +93,7 @@ class TestMergeUsage:
         assert u.input_tokens == 0
 
     def test_usage_spread_across_events(self):
-        """Fall 3: Usage über mehrere Events verteilt wird zusammengeführt."""
+        """Case 3: usage spread over multiple events is merged."""
         events = [
             {"type": "message_start", "usage": {"input_tokens": 100, "output_tokens": 1}},
             {"type": "content_block_delta", "delta": {"type": "text_delta"}},
@@ -103,7 +103,7 @@ class TestMergeUsage:
         for e in events:
             merge_usage(e, acc)
         assert acc.input_tokens == 100
-        assert acc.output_tokens == 250  # überschrieben vom letzten Event
+        assert acc.output_tokens == 250  # overwritten by the last event
 
     def test_cache_fields_anthropic_names(self):
         event = {
@@ -119,7 +119,7 @@ class TestMergeUsage:
         assert u.cache_read_input_tokens == 300
 
     def test_cache_fields_openai_names(self):
-        """Toleranz für OpenAI-Feldnamen (prompt_cache_hit/miss)."""
+        """Tolerance for OpenAI field names (prompt_cache_hit/miss)."""
         event = {
             "usage": {
                 "prompt_tokens": 1000,
@@ -178,7 +178,7 @@ class TestFullPipeline:
         assert u.request_id == "m1"
 
     def test_json_split_across_chunks(self):
-        """Fall 5: JSON über mehrere Chunks verteilt — durch den echten Parser."""
+        """Case 5: JSON spread over several chunks — through the real parser."""
         full = b'event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":99}}\n\n'
         events = []
         parser = SSEParser(on_event=lambda n, d: events.append((n, d)))
@@ -191,11 +191,11 @@ class TestFullPipeline:
         assert u.output_tokens == 99
 
     def test_invalid_json_does_not_crash_parser(self):
-        """Fall 9: ungültiges JSON darf den Parser nicht crashen (nur Consumer)."""
+        """Case 9: invalid JSON must not crash the parser (only the consumer)."""
         payload = b'event: message_delta\ndata: {invalid json!!!}\n\n'
         events = []
         parser = SSEParser(on_event=lambda n, d: events.append((n, d)))
-        parser.feed(payload)  # Parser liefert den String unverändert
+        parser.feed(payload)  # parser returns the string unchanged
         assert events[0][1] == "{invalid json!!!}"
         # Consumer-seitig: json.loads wirft — das muss der Aufrufer abfangen.
         with pytest.raises(json.JSONDecodeError):

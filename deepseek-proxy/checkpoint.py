@@ -1,32 +1,32 @@
 #!/usr/bin/env python3
 """
-Validierungs-Skript: Kontrollpunkte + kontrollierter Cache-Test.
+Validation script: checkpoints + controlled cache test.
 
-Dient zur Validierung der Proxy-Kostenrechnung gegen die Ground-Truth
-(https://platform.deepseek.com/usage). Der API-Key wird aus
-~/.config/deepseek/api_key gelesen und NIE ausgegeben.
+Used to validate the proxy cost calculation against the ground truth
+(https://platform.deepseek.com/usage). The API key is read from
+~/.config/deepseek/api_key and NEVER printed.
 
-Modi:
+Modes:
   .venv/bin/python checkpoint.py save <label> [--usage N]
-      Speichert einen Kontrollpunkt (DB-Snapshot + optional die aktuell auf der
-      Usage-Seite abgelesene Gesamt-Token-Zahl).
+      Save a checkpoint (DB snapshot + optionally the total token count
+      currently read off the usage page).
 
   .venv/bin/python checkpoint.py list
-      Listet alle gespeicherten Kontrollpunkte.
+      List all saved checkpoints.
 
   .venv/bin/python checkpoint.py compare <label> [--usage N]
-      Zeigt das Delta (Requests/Token/Kosten) seit dem Kontrollpunkt. Mit
-      --usage N wird zusätzlich das Usage-Seiten-Delta (N - usage_im_kontrollpunkt)
-      ausgegeben und mit dem DB-Delta verglichen.
+      Show the delta (requests/tokens/cost) since the checkpoint. With
+      --usage N the usage-page delta (N - usage_at_checkpoint) is additionally
+      printed and compared to the DB delta.
 
   .venv/bin/python checkpoint.py cachetest [--words 2000]
-      Sendet ZWEI identische große Requests durch den Proxy:
-      Request 1 = Cache-MISS (frisch), Request 2 = Cache-HIT (gecacht).
-      Zeigt beide Messungen + den Kostenvergleich.
+      Send TWO identical large requests through the proxy:
+      Request 1 = cache MISS (fresh), Request 2 = cache HIT (cached).
+      Shows both measurements + the cost comparison.
 
-WICHTIG zur Isolation des laufenden Chats: Während der Testphase (Sekunden)
-solltest du im Chat nichts Neues senden. Der Test misst sein Delta über die
-Proxy-DB exakt; die Usage-Seite dient nur als unabhängige Gegenprobe.
+IMPORTANT for isolating the running chat: during the test phase (seconds) you
+should not send anything new in the chat. The test measures its delta exactly
+via the proxy DB; the usage page only serves as an independent cross-check.
 """
 
 from __future__ import annotations
@@ -39,12 +39,12 @@ import sys
 import time
 import urllib.request
 
-KEY_FILE = "/home/admin/.config/deepseek/api_key"
+KEY_FILE = os.path.expanduser("~/.config/deepseek/api_key")
 PROXY_URL = "http://127.0.0.1:8000/anthropic/v1/messages"
-DB_PATH = "/home/admin/.local/state/deepseek/usage.db"
-CHECKPOINT_FILE = "/home/admin/.local/state/deepseek/checkpoints.json"
+DB_PATH = os.path.expanduser("~/.local/state/deepseek/usage.db")
+CHECKPOINT_FILE = os.path.expanduser("~/.local/state/deepseek/checkpoints.json")
 
-# Proxy-Module importierbar machen (Skript liegt im Projekt-Root).
+# Make the proxy modules importable (script lives in the project root).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -54,7 +54,7 @@ def read_key() -> str:
 
 
 def _db_snapshot() -> dict:
-    """Liest den aktuellen DB-Stand (Totals + max_id)."""
+    """Read the current DB state (totals + max_id)."""
     from proxy.cost_calc import calc_usage_cost
     from proxy.pricing import load_pricing
     from proxy.storage import Storage, row_to_usage
@@ -116,37 +116,37 @@ def cmd_save(label: str, usage_tokens: int | None) -> None:
         "usage_page_tokens": usage_tokens,
     }
     _save_checkpoints(cps)
-    print(f"Kontrollpunkt '{label}' gespeichert:")
-    print(f"  Zeit:        {cps[label]['timestamp']}")
-    print(f"  DB-Events:   {snap['requests']} (max_id={snap['max_id']})")
-    print(f"  Token gesamt:{_total_tokens(snap):,}")
-    print(f"  Kosten:      ${snap['cost_usd']:.6f}")
+    print(f"Checkpoint '{label}' saved:")
+    print(f"  Time:        {cps[label]['timestamp']}")
+    print(f"  DB events:   {snap['requests']} (max_id={snap['max_id']})")
+    print(f"  Total tokens:{_total_tokens(snap):,}")
+    print(f"  Cost:        ${snap['cost_usd']:.6f}")
     if usage_tokens is not None:
-        print(f"  Usage-Seite: {usage_tokens:,} Tokens")
+        print(f"  Usage page:  {usage_tokens:,} tokens")
 
 
 def cmd_list() -> None:
     cps = _load_checkpoints()
     if not cps:
-        print("Keine Kontrollpunkte vorhanden.")
+        print("No checkpoints present.")
         return
-    print("Kontrollpunkte:")
+    print("Checkpoints:")
     for label, cp in cps.items():
         u = cp.get("usage_page_tokens")
         ustr = f"{u:,}" if u is not None else "-"
-        print(f"  {label}: {cp['timestamp']} | DB-Tokens={cp['total_tokens']:,} "
-              f"| Usage-Seite={ustr} | ${cp['cost_usd']:.6f}")
+        print(f"  {label}: {cp['timestamp']} | DB-tokens={cp['total_tokens']:,} "
+              f"| usage-page={ustr} | ${cp['cost_usd']:.6f}")
 
 
 def cmd_compare(label: str, usage_tokens: int | None) -> None:
     cps = _load_checkpoints()
     if label not in cps:
-        print(f"Kontrollpunkt '{label}' nicht gefunden. Verfügbar: {list(cps)}")
+        print(f"Checkpoint '{label}' not found. Available: {list(cps)}")
         return 1
     cp = cps[label]
     snap = _db_snapshot()
 
-    # Delta nur für Events NACH dem Kontrollpunkt (id > max_id).
+    # Delta only for events AFTER the checkpoint (id > max_id).
     from proxy.cost_calc import calc_usage_cost
     from proxy.pricing import load_pricing
     from proxy.storage import Storage, row_to_usage
@@ -169,32 +169,32 @@ def cmd_compare(label: str, usage_tokens: int | None) -> None:
     d["cost_usd"] = round(d["cost_usd"], 8)
     d_tokens = d["input"] + d["cache_read"] + d["output"]
 
-    print(f"Delta seit Kontrollpunkt '{label}' ({cp['timestamp']}):")
-    print(f"  Neue Requests:    {d['requests']}")
-    print(f"  Input (Miss):     {d['input']:,}")
-    print(f"  Cache-Read (Hit): {d['cache_read']:,}")
-    print(f"  Output:           {d['output']:,}")
-    print(f"  Token gesamt:     {d_tokens:,}")
-    print(f"  Kosten:           ${d['cost_usd']:.6f}")
+    print(f"Delta since checkpoint '{label}' ({cp['timestamp']}):")
+    print(f"  New requests:    {d['requests']}")
+    print(f"  Input (miss):    {d['input']:,}")
+    print(f"  Cache-read (hit):{d['cache_read']:,}")
+    print(f"  Output:          {d['output']:,}")
+    print(f"  Total tokens:    {d_tokens:,}")
+    print(f"  Cost:            ${d['cost_usd']:.6f}")
 
     if usage_tokens is not None and cp.get("usage_page_tokens") is not None:
         usage_delta = usage_tokens - cp["usage_page_tokens"]
         print()
-        print("  === Vergleich mit Usage-Seite (Ground-Truth) ===")
-        print(f"  Usage-Seite vorher:  {cp['usage_page_tokens']:,}")
-        print(f"  Usage-Seite nachher: {usage_tokens:,}")
-        print(f"  Usage-Delta:         {usage_delta:,}")
-        print(f"  Proxy-DB-Delta:      {d_tokens:,}")
+        print("  === Comparison with usage page (ground truth) ===")
+        print(f"  Usage page before:  {cp['usage_page_tokens']:,}")
+        print(f"  Usage page after:   {usage_tokens:,}")
+        print(f"  Usage delta:        {usage_delta:,}")
+        print(f"  Proxy DB delta:     {d_tokens:,}")
         diff = usage_delta - d_tokens
-        print(f"  Differenz:           {diff:,}  "
-              f"({'Übereinstimmung' if diff == 0 else 'Abweichung'})")
+        print(f"  Difference:         {diff:,}  "
+              f"({'match' if diff == 0 else 'mismatch'})")
     elif usage_tokens is not None and cp.get("usage_page_tokens") is None:
         print()
-        print("  Hinweis: Kontrollpunkt hat keine Usage-Seiten-Tokens gespeichert.")
+        print("  Note: checkpoint has no usage-page tokens stored.")
 
 
 def _send_request(prompt: str) -> dict:
-    """Sendet einen Request durch den Proxy und liest den zuletzt erfassten Eintrag."""
+    """Send a request through the proxy and read the last recorded entry."""
     body = {
         "model": "deepseek-flash",
         "max_tokens": 32,
@@ -231,57 +231,56 @@ def _send_request(prompt: str) -> dict:
 
 
 def make_large_prompt(words: int) -> str:
-    """Erzeugt einen großen, GARANTIERT EINZIGARTIGEN Prompt (~words Wörter).
+    """Create a large, GUARANTEED-UNIQUE prompt (~words words).
 
-    Der Text enthält eine zufällige Nonce in JEDER Zeile, damit er sich über
-    Testläufe hinweg NICHT per Präfix-Cache wiedertreffen kann. Nur so ist
-    Request 1 eines Laufs ein echter Cache-MISS und Request 2 (identisch)
-    ein echter Cache-HIT.
+    The text contains a random nonce in EVERY line so that it cannot re-hit the
+    prefix cache across test runs. Only this way is request 1 of a run a real
+    cache MISS and request 2 (identical) a real cache HIT.
     """
     nonce = secrets.token_hex(8)
     parts = []
     i = 0
     while sum(len(p.split()) for p in parts) < words:
         parts.append(
-            f"Absatz {i} nonce {nonce} zufallswort {secrets.token_hex(4)}: "
-            f"Dies ist ein eindeutiger Testtext für die Cache-Validierung. "
-            f"Er enthält eine zufällige Kennung {nonce}-{i}, damit jeder "
-            f"Testlauf garantiert frisch ist und keinen Präfix-Cache trifft."
+            f"Paragraph {i} nonce {nonce} randomword {secrets.token_hex(4)}: "
+            f"This is a unique test text for cache validation. "
+            f"It contains a random identifier {nonce}-{i}, so every "
+            f"test run is guaranteed fresh and does not hit a prefix cache."
         )
         i += 1
     return " ".join(parts)
 
 
 def cmd_cachetest(words: int) -> None:
-    print(f"=== CACHE-TEST (Prompt ~{words} Wörter) ===")
-    print("Erzeuge großen, eindeutigen Prompt ...")
+    print(f"=== CACHE TEST (prompt ~{words} words) ===")
+    print("Generating large, unique prompt ...")
     prompt = make_large_prompt(words)
-    approx_tokens = len(prompt.split())  # grobe Schätzung
-    print(f"Prompt: {len(prompt.split())} Wörter (~{approx_tokens} Tokens)")
+    approx_tokens = len(prompt.split())  # rough estimate
+    print(f"Prompt: {len(prompt.split())} words (~{approx_tokens} tokens)")
 
-    print("\n--- Request 1 (erwartet: Cache-MISS) ---")
+    print("\n--- Request 1 (expected: cache MISS) ---")
     r1 = _send_request(prompt)
-    print(f"  Input (Miss):   {r1['input']:,}")
-    print(f"  Cache-Read:     {r1['cache_read']:,}")
+    print(f"  Input (miss):   {r1['input']:,}")
+    print(f"  Cache-read:     {r1['cache_read']:,}")
     print(f"  Output:         {r1['output']:,}")
-    print(f"  Kosten:         ${r1['cost_usd']:.8f}")
+    print(f"  Cost:           ${r1['cost_usd']:.8f}")
 
-    print("\n--- Request 2 (identisch, erwartet: Cache-HIT) ---")
+    print("\n--- Request 2 (identical, expected: cache HIT) ---")
     r2 = _send_request(prompt)
-    print(f"  Input (Miss):   {r2['input']:,}")
-    print(f"  Cache-Read:     {r2['cache_read']:,}")
+    print(f"  Input (miss):   {r2['input']:,}")
+    print(f"  Cache-read:     {r2['cache_read']:,}")
     print(f"  Output:         {r2['output']:,}")
-    print(f"  Kosten:         ${r2['cost_usd']:.8f}")
+    print(f"  Cost:           ${r2['cost_usd']:.8f}")
 
-    print("\n=== AUSWERTUNG ===")
+    print("\n=== EVALUATION ===")
     hit_detected = r2["cache_read"] > r1["cache_read"]
-    print(f"Cache-HIT erkannt: {'JA' if hit_detected else 'NEIN'} "
-          f"(Request 2 cache_read={r2['cache_read']:,} vs Request 1 "
+    print(f"Cache HIT detected: {'YES' if hit_detected else 'NO'} "
+          f"(request 2 cache_read={r2['cache_read']:,} vs request 1 "
           f"cache_read={r1['cache_read']:,})")
-    print(f"Kostenersparnis durch Cache: ${r1['cost_usd'] - r2['cost_usd']:.8f}")
+    print(f"Cost saving via cache: ${r1['cost_usd'] - r2['cost_usd']:.8f}")
     print()
-    print("=> Vergleiche: (Input+CacheRead+Output) der beiden Requests mit dem "
-          "Usage-Seiten-Delta (vorher/nachher abgelesen).")
+    print("=> Compare: (input+cache-read+output) of the two requests with the "
+          "usage-page delta (read before/after).")
 
 
 def main() -> int:
@@ -289,25 +288,25 @@ def main() -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     def _usage_int(value: str) -> int:
-        """Parst eine Token-Zahl; toleriert Kommas/Unterstriche/Leerzeichen."""
+        """Parse a token count; tolerate commas/underscores/spaces."""
         cleaned = value.replace(",", "").replace("_", "").replace(" ", "")
         return int(cleaned)
 
-    p_save = sub.add_parser("save", help="Kontrollpunkt speichern")
+    p_save = sub.add_parser("save", help="Save a checkpoint")
     p_save.add_argument("label")
     p_save.add_argument("--usage", type=_usage_int, default=None,
-                        help="aktuelle Gesamt-Token-Zahl von der Usage-Seite")
+                        help="current total token count from the usage page")
 
-    sub.add_parser("list", help="Kontrollpunkte auflisten")
+    sub.add_parser("list", help="List checkpoints")
 
-    p_cmp = sub.add_parser("compare", help="Delta seit Kontrollpunkt")
+    p_cmp = sub.add_parser("compare", help="Delta since checkpoint")
     p_cmp.add_argument("label")
     p_cmp.add_argument("--usage", type=_usage_int, default=None,
-                       help="aktuelle Gesamt-Token-Zahl von der Usage-Seite")
+                       help="current total token count from the usage page")
 
-    p_ct = sub.add_parser("cachetest", help="Cache-MISS/HIT-Test")
+    p_ct = sub.add_parser("cachetest", help="Cache MISS/HIT test")
     p_ct.add_argument("--words", type=int, default=2000,
-                      help="Prompt-Größe in Wörtern (Default 2000)")
+                      help="prompt size in words (default 2000)")
 
     args = parser.parse_args()
 

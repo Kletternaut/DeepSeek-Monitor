@@ -1,4 +1,4 @@
-"""Tests für Preismodell, Peak/Off-Peak-Logik und Kostenberechnung."""
+"""Tests for the price model, peak/off-peak logic and cost calculation."""
 
 import json
 

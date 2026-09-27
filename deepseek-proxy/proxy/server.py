@@ -1,33 +1,32 @@
-"""Streaming-Proxy zwischen VS-Code (Anthropic Messages API) und DeepSeek.
+"""Streaming proxy between VS Code (Anthropic Messages API) and DeepSeek.
 
-Der Proxy stellt die beiden Endpunkte ``POST /anthropic/v1/messages`` und
-``POST /v1/messages`` bereit, leitet die Requests **bytegenau und unverändert**
-an ``https://api.deepseek.com/anthropic/v1/messages`` weiter und streamt die
-Antwort (Server-Sent-Events) unverändert zum Client zurück.
+The proxy exposes the two endpoints ``POST /anthropic/v1/messages`` and
+``POST /v1/messages``, forwards the requests **byte-exact and unchanged** to
+``https://api.deepseek.com/anthropic/v1/messages`` and streams the response
+(Server-Sent Events) back to the client unchanged.
 
-Transparenz ist die Kernfunktion:
+Transparency is the core feature:
 
-* Der Request-Body wird als rohe Bytes empfangen und 1:1 weitergegeben -- es
-  findet keine Dekodierung/Neukodierung und keine Feldmanipulation statt.
-* Request-Header werden durchgereicht (insbesondere ``x-api-key``,
-  ``anthropic-version``, ``anthropic-beta``). Es wird **kein** eigener
-  API-Key erzeugt oder eingesetzt.
-* Nur Hop-by-Hop-Header werden entfernt; ``Host`` wird auf den Upstream
-  gesetzt, ``Content-Length`` übernimmt httpx.
-* Antwort-Bytes werden unverändert gestreamt; der Antwort-Status und die
-  Antwort-Header (inkl. Content-Type) werden übernommen.
+* The request body is received as raw bytes and passed through 1:1 -- no
+decoding/re-encoding and no field manipulation takes place.
+* Request headers are passed through (especially ``x-api-key``,
+  ``anthropic-version``, ``anthropic-beta``). **No** own API key is created or
+  inserted.
+* Only hop-by-hop headers are removed; ``Host`` is set to the upstream,
+  ``Content-Length`` is handled by httpx.
+* Response bytes are streamed unchanged; the response status and the response
+  headers (including Content-Type) are adopted.
 
-Neben dem Transport läuft eine vollständig entkoppelte Token-Überwachung: eine
-Kopie jedes Upstream-Chunks wird in einen inkrementellen SSE-Parser gefüttert,
-die ``usage``-Objekte werden zusammengeführt und am Stream-Ende als **ein**
-:class:`~proxy.usage.TokenUsage` an ``usage_callback`` übergeben. Ein Fehler im
-Monitoring kann den Datenstrom niemals beschädigen.
+Alongside the transport runs a fully decoupled token monitor: a copy of every
+upstream chunk is fed into an incremental SSE parser, the ``usage`` objects are
+merged and passed as **one** :class:`~proxy.usage.TokenUsage` to
+``usage_callback`` at stream end. An error in the monitoring can never corrupt
+the data stream.
 
-Der HTTP-Server läuft in einem eigenen Daemon-Thread mit eigener asyncio-
-Eventloop, damit der Proxy später aus einer Tkinter-Anwendung heraus gestartet
-und gestoppt werden kann.
+The HTTP server runs in its own daemon thread with its own asyncio event loop,
+so the proxy can later be started and stopped from within a Tkinter application.
 
-Öffentliche Symbole:
+Public symbols:
     * :class:`DeepSeekProxyServer`
     * :data:`DEFAULT_UPSTREAM_URL`
 """
@@ -59,7 +58,7 @@ __all__ = ["DeepSeekProxyServer", "DEFAULT_UPSTREAM_URL"]
 
 DEFAULT_UPSTREAM_URL = "https://api.deepseek.com/anthropic/v1/messages"
 
-#: Hop-by-Hop-Header laut RFC 7230 -- dürfen nicht weitergegeben werden.
+#: Hop-by-hop headers per RFC 7230 -- must not be forwarded.
 _HOP_BY_HOP = frozenset(
     {
         "connection",
@@ -73,21 +72,21 @@ _HOP_BY_HOP = frozenset(
     }
 )
 
-#: Request-Header, die zusätzlich verworfen werden (Werte setzt httpx/Host selbst).
+#: Request headers that are additionally dropped (httpx/Host set these itself).
 _DROP_REQUEST_HEADERS = _HOP_BY_HOP | {"content-length", "host"}
 
-#: Response-Header, die zusätzlich verworfen werden. ``content-length`` wird
-#: entfernt, weil die Antwort erneut (chunked) gestreamt wird.
+#: Response headers that are additionally dropped. ``content-length`` is
+#: removed because the response is streamed again (chunked).
 _DROP_RESPONSE_HEADERS = _HOP_BY_HOP | {"content-length"}
 
-#: Obergrenze für das Puffern einer Nicht-SSE-/JSON-Antwort zur Usage-Ermittlung.
+#: Upper bound for buffering a non-SSE/JSON response for usage extraction.
 _MAX_JSON_BUFFER = 1 << 20  # 1 MiB
 
 UsageCallback = Callable[[TokenUsage], Any]
 
 
 def _default_usage_callback(usage: TokenUsage) -> None:
-    """Default-``usage_callback``: schreibt die Usage nur ins Log."""
+    """Default ``usage_callback``: write the usage only to the log."""
     usage_logger.info(
         "usage in=%d out=%d cache_read=%d cache_write=%d total=%d model=%s "
         "request_id=%s key=%s",
@@ -103,16 +102,16 @@ def _default_usage_callback(usage: TokenUsage) -> None:
 
 
 def _mask_secret(value: str) -> str:
-    """Maskiert einen Secret-Wert für Logausgaben (nur Präfix bleibt sichtbar)."""
+    """Mask a secret value for log output (only the prefix stays visible)."""
     if not value:
-        return "<leer>"
+        return "<empty>"
     if len(value) <= 4:
         return "****"
     return f"{value[:4]}…"
 
 
 def _format_headers_for_log(pairs: Iterable[tuple[str, str]]) -> list[str]:
-    """Bereitet Header für Debug-Logs auf und maskiert sensible Werte."""
+    """Prepare headers for debug logs and mask sensitive values."""
     return [
         f"{name}: {_mask_secret(value) if name.lower() == 'x-api-key' else value}"
         for name, value in pairs
@@ -120,7 +119,7 @@ def _format_headers_for_log(pairs: Iterable[tuple[str, str]]) -> list[str]:
 
 
 class _InterruptibleServer(uvicorn.Server):
-    """Uvicorn-Server, der in einem Thread läuft und Startbereitschaft meldet."""
+    """Uvicorn server that runs in a thread and reports start readiness."""
 
     def __init__(
         self,
@@ -130,9 +129,9 @@ class _InterruptibleServer(uvicorn.Server):
         super().__init__(config)
         self._on_started = on_started
 
-    def install_signal_handlers(self) -> None:  # noqa: D102 - absichtlich no-op
-        # Signal-Handler dürfen nur im Main-Thread registriert werden.
-        # Der Server läuft in einem eigenen Thread -> nichts tun.
+    def install_signal_handlers(self) -> None:  # noqa: D102 - intentionally no-op
+        # Signal handlers may only be registered in the main thread.
+        # The server runs in its own thread -> do nothing.
         return
 
     async def startup(self, sockets: Sequence[Any] | None = None) -> None:  # type: ignore[override]
@@ -141,22 +140,22 @@ class _InterruptibleServer(uvicorn.Server):
         if callback is not None:
             try:
                 callback()
-            except Exception:  # pragma: no cover - rein defensiv
-                logger.exception("on_started-Callback fehlgeschlagen")
+            except Exception:  # pragma: no cover - purely defensive
+                logger.exception("on_started callback failed")
 
 
 class DeepSeekProxyServer:
-    """Streaming-Proxy-Server mit Token-Überwachung.
+    """Streaming proxy server with token monitoring.
 
-    Parameter:
-        usage_callback: Callable ``(TokenUsage) -> None`` oder Coroutine-Funktion.
-            Default: :func:`_default_usage_callback` (loggt nur).
-        host: Bind-Adresse (Default ``127.0.0.1``).
-        port: Bind-Port (Default ``8000``).
-        upstream_url: Ziel-URL der DeepSeek-Anthropic-API.
-        timeout: httpx-``Timeout``. Default: connect 10s / read 600s /
-            write 60s / pool 10s (kein Read-Abbruch bei langen SSE-Streams).
-        log_level: Uvicorn-Log-Level.
+    Parameters:
+        usage_callback: Callable ``(TokenUsage) -> None`` or coroutine function.
+            Default: :func:`_default_usage_callback` (logs only).
+        host: Bind address (default ``127.0.0.1``).
+        port: Bind port (default ``8000``).
+        upstream_url: Target URL of the DeepSeek-Anthropic API.
+        timeout: httpx ``Timeout``. Default: connect 10s / read 600s /
+            write 60s / pool 10s (no read abort for long SSE streams).
+        log_level: Uvicorn log level.
     """
 
     def __init__(
@@ -209,32 +208,32 @@ class DeepSeekProxyServer:
     # -------------------------------------------------------------- lifecycle
     @property
     def app(self) -> FastAPI:
-        """Die zugrunde liegende FastAPI-Anwendung."""
+        """The underlying FastAPI application."""
         return self._app
 
     @property
     def base_url(self) -> str:
-        """Basis-URL des laufenden Proxy-Servers."""
+        """Base URL of the running proxy server."""
         return f"http://{self.host}:{self.port}"
 
     @property
     def is_running(self) -> bool:
-        """``True``, wenn der Server-Thread läuft."""
+        """``True`` if the server thread is running."""
         return self._thread is not None and self._thread.is_alive()
 
     def start(self, wait: bool = True, timeout: float = 15.0) -> None:
-        """Startet den Uvicorn-Server in einem eigenen Daemon-Thread.
+        """Start the Uvicorn server in its own daemon thread.
 
-        Parameter:
-            wait: Auf die Startbereitschaft warten (Default ``True``).
-            timeout: Maximale Wartezeit auf die Startbereitschaft in Sekunden.
+        Parameters:
+            wait: Wait for start readiness (default ``True``).
+            timeout: Maximum wait time for start readiness in seconds.
 
         Raises:
-            RuntimeError: Wenn der Server bereits läuft oder nicht rechtzeitig
-                bereit wird.
+            RuntimeError: If the server is already running or does not become
+                ready in time.
         """
         if self.is_running:
-            raise RuntimeError("Proxy-Server läuft bereits")
+            raise RuntimeError("Proxy server already running")
 
         self._ready.clear()
         config = uvicorn.Config(
@@ -244,7 +243,7 @@ class DeepSeekProxyServer:
             loop="asyncio",
             lifespan="on",
             log_level=self.log_level,
-            log_config=None,  # Host-Anwendung nicht die Logging-Config zerschießen
+            log_config=None,  # do not let the host app destroy the logging config
         )
         self._server = _InterruptibleServer(config, on_started=self._ready.set)
 
@@ -257,28 +256,28 @@ class DeepSeekProxyServer:
 
         if wait and not self._ready.wait(timeout=timeout):
             raise RuntimeError(
-                f"Proxy-Server wurde nicht innerhalb von {timeout:.1f}s bereit"
+                f"Proxy server did not become ready within {timeout:.1f}s"
             )
 
-        logger.info("Proxy läuft auf %s -> %s", self.base_url, self.upstream_url)
+        logger.info("Proxy running at %s -> %s", self.base_url, self.upstream_url)
 
     def _run(self) -> None:
-        """Thread-Target: betreibt Uvicorn mit eigener Eventloop."""
+        """Thread target: run Uvicorn with its own event loop."""
         server = self._server
-        if server is None:  # pragma: no cover - rein defensiv
+        if server is None:  # pragma: no cover - purely defensive
             return
         try:
             server.run()
-        except Exception:  # pragma: no cover - Thread darf nicht lautlos sterben
-            logger.exception("Uvicorn-Server im Proxy-Thread abgestürzt")
+        except Exception:  # pragma: no cover - thread must not die silently
+            logger.exception("Uvicorn server in proxy thread crashed")
         finally:
             self._ready.set()
 
     def stop(self, timeout: float = 10.0) -> None:
-        """Fährt den Server kontrolliert herunter.
+        """Shut the server down in a controlled manner.
 
-        Setzt ``should_exit`` und wartet auf das Ende des Server-Threads. Reagiert
-        der Thread nicht innerhalb von ``timeout``, wird der Shutdown erzwungen.
+        Sets ``should_exit`` and waits for the server thread to end. If the
+        thread does not react within ``timeout``, the shutdown is forced.
         """
         server = self._server
         thread = self._thread
@@ -291,29 +290,29 @@ class DeepSeekProxyServer:
         if thread is not None and thread.is_alive():
             thread.join(timeout=timeout)
             if thread.is_alive():
-                logger.warning("Proxy-Thread reagierte nicht -- erzwinge Shutdown")
+                logger.warning("Proxy thread did not react -- forcing shutdown")
                 if server is not None:
                     server.should_force_exit = True
                 thread.join(timeout=timeout)
-            if thread.is_alive():  # pragma: no cover - sehr unwahrscheinlich
-                logger.error("Proxy-Thread konnte nicht beendet werden")
+            if thread.is_alive():  # pragma: no cover - very unlikely
+                logger.error("Proxy thread could not be terminated")
 
         self._server = None
         self._thread = None
-        logger.info("Proxy gestoppt")
+        logger.info("Proxy stopped")
 
     # ---------------------------------------------------------------- handling
     async def _handle_messages(self, request: Request) -> Response:
-        """Reicht einen Messages-Request transparent an DeepSeek weiter."""
-        # Bytegenauer Body -- keine Dekodierung, keine Rekonstruktion.
+        """Forward a Messages request transparently to DeepSeek."""
+        # Byte-exact body -- no decoding, no reconstruction.
         body = await request.body()
 
-        # Einweg-Hash des API-Keys zur Zuordnung der Usage (kein Klartext).
+        # One-way hash of the API key to associate the usage (no plaintext).
         api_key_fingerprint = fingerprint_key(request.headers.get("x-api-key", ""))
 
         upstream_headers = self._build_upstream_headers(request)
         logger.debug(
-            "Proxy-Request %s %s (%d Bytes) Header: %s",
+            "Proxy request %s %s (%d bytes) headers: %s",
             request.method,
             request.url.path,
             len(body),
@@ -323,7 +322,7 @@ class DeepSeekProxyServer:
         client = httpx.AsyncClient(
             timeout=self.timeout,
             follow_redirects=False,
-            # Eigene Verbindung pro Request -> sauberes Aufräumen bei Abbruch.
+            # Own connection per request -> clean cleanup on abort.
         )
         try:
             upstream_request = client.build_request(
@@ -336,7 +335,7 @@ class DeepSeekProxyServer:
                 upstream = await client.send(upstream_request, stream=True)
             except httpx.HTTPError as exc:
                 logger.warning(
-                    "Upstream-Verbindung fehlgeschlagen (%s): %s",
+                    "Upstream connection failed (%s): %s",
                     exc.__class__.__name__,
                     exc,
                 )
@@ -349,8 +348,8 @@ class DeepSeekProxyServer:
                         "error": {
                             "type": "proxy_upstream_error",
                             "message": (
-                                "Proxy konnte die Upstream-Verbindung nicht "
-                                f"aufbauen ({exc.__class__.__name__})."
+                                "Proxy could not establish the upstream "
+                                f"connection ({exc.__class__.__name__})."
                             ),
                         },
                     },
@@ -362,7 +361,7 @@ class DeepSeekProxyServer:
 
         response_headers = self._build_response_headers(upstream)
         logger.debug(
-            "Upstream-Antwort %d Header: %s",
+            "Upstream response %d headers: %s",
             upstream.status_code,
             list(response_headers.keys()),
         )
@@ -371,12 +370,12 @@ class DeepSeekProxyServer:
             self._stream_upstream(upstream, client, api_key_fingerprint),
             status_code=upstream.status_code,
             headers=response_headers,
-            media_type=None,  # Content-Type kommt 1:1 vom Upstream
+            media_type=None,  # Content-Type comes 1:1 from upstream
         )
 
     # ---------------------------------------------------------------- headers
     def _build_upstream_headers(self, request: Request) -> list[tuple[str, str]]:
-        """Filtert die eingehenden Header und setzt den Upstream-``Host``."""
+        """Filter the incoming headers and set the upstream ``Host``."""
         headers: list[tuple[str, str]] = []
         for raw_name, raw_value in request.headers.raw:
             name = raw_name.decode("latin-1")
@@ -388,7 +387,7 @@ class DeepSeekProxyServer:
 
     @staticmethod
     def _build_response_headers(upstream: httpx.Response) -> httpx.Headers:
-        """Filtert die Antwort-Header (Hop-by-Hop und ``content-length`` raus)."""
+        """Filter the response headers (drop hop-by-hop and ``content-length``)."""
         headers = [
             (name.decode("latin-1"), value.decode("latin-1"))
             for name, value in upstream.headers.raw
@@ -403,10 +402,10 @@ class DeepSeekProxyServer:
         client: httpx.AsyncClient,
         api_key_fingerprint: str = "",
     ) -> Any:
-        """Generator: liefert Original-Bytes und überwacht parallel die Usage.
+        """Generator: deliver original bytes and monitor usage in parallel.
 
-        Der Transport steht immer an erster Stelle: Bytes werden unverändert
-        weitergereicht, Monitoring läuft isoliert in ``try/except``.
+        The transport always comes first: bytes are passed through unchanged,
+        monitoring runs isolated in ``try/except``.
         """
         accumulator = TokenUsage(api_key_fingerprint=api_key_fingerprint)
         state = {"seen": False, "emitted": False}
@@ -421,7 +420,7 @@ class DeepSeekProxyServer:
             try:
                 obj = json.loads(data)
             except (ValueError, TypeError):
-                # Ungültiges JSON (z. B. Keep-alive) darf niemals crashen.
+                # Invalid JSON (e.g. keep-alive) must never crash.
                 return
             if not isinstance(obj, dict):
                 return
@@ -430,7 +429,7 @@ class DeepSeekProxyServer:
             try:
                 merge_usage(obj, accumulator)
             except Exception:
-                logger.exception("Fehler beim Zusammenführen der Usage-Daten")
+                logger.exception("Error merging usage data")
 
         parser = SSEParser(on_event=on_sse_event)
 
@@ -438,20 +437,20 @@ class DeepSeekProxyServer:
             async for chunk in upstream.aiter_raw():
                 if not chunk:
                     continue
-                # Monitoring zuerst, aber vollständig isoliert.
+                # Monitoring first, but fully isolated.
                 try:
                     if is_sse:
                         parser.feed(chunk)
                     elif len(json_buffer) < _MAX_JSON_BUFFER:
                         json_buffer.extend(chunk)
                 except Exception:
-                    logger.exception("Fehler im Usage-Monitoring (Stream läuft weiter)")
+                    logger.exception("Error in usage monitoring (stream continues)")
                 yield chunk
         except asyncio.CancelledError:
-            logger.debug("Stream durch Client-Abbruch beendet")
+            logger.debug("Stream ended by client abort")
             raise
         except httpx.HTTPError as exc:
-            logger.warning("Upstream-Stream abgebrochen: %s", exc)
+            logger.warning("Upstream stream aborted: %s", exc)
         finally:
             if not is_sse and json_buffer:
                 self._merge_json_body(bytes(json_buffer), accumulator, state)
@@ -466,9 +465,9 @@ class DeepSeekProxyServer:
                 try:
                     await self._emit_usage(accumulator)
                 except asyncio.CancelledError:
-                    logger.debug("Usage-Callback während Abbruch verworfen")
+                    logger.debug("Usage callback discarded during abort")
                 except Exception:
-                    logger.exception("Usage-Callback fehlgeschlagen (Stream bleibt intakt)")
+                    logger.exception("Usage callback failed (stream stays intact)")
 
     @staticmethod
     def _merge_json_body(
@@ -476,7 +475,7 @@ class DeepSeekProxyServer:
         accumulator: TokenUsage,
         state: dict[str, bool],
     ) -> None:
-        """Wertet eine (nicht gestreamte) JSON-Antwort auf ``usage`` aus."""
+        """Evaluate a (non-streamed) JSON response for ``usage``."""
         try:
             obj = json.loads(body.decode("utf-8", errors="replace"))
         except (ValueError, TypeError, UnicodeError):
@@ -488,16 +487,16 @@ class DeepSeekProxyServer:
         try:
             merge_usage(obj, accumulator)
         except Exception:
-            logger.exception("Fehler beim Zusammenführen der JSON-Usage-Daten")
+            logger.exception("Error merging JSON usage data")
 
     # ---------------------------------------------------------------- callback
     async def _emit_usage(self, usage: TokenUsage) -> None:
-        """Übergibt die konsolidierte Usage genau einmal an den Callback.
+        """Pass the consolidated usage exactly once to the callback.
 
-        Ein Coroutine-Rückgabewert wird ``await``-ed. Fehler im Callback werden
-        abgefangen und geloggt -- der Stream darf dadurch nicht abbrechen.
+        A coroutine return value is ``await``-ed. Errors in the callback are
+        caught and logged -- the stream must not abort because of them.
         """
-        # total_tokens-Fallback (input_tokens enthält bereits die Cache-Token).
+        # total_tokens fallback (input_tokens already contains the cache tokens).
         finalize_usage(usage)
 
         callback = self._usage_callback
@@ -508,4 +507,4 @@ class DeepSeekProxyServer:
             if inspect.isawaitable(result):
                 await result
         except Exception:
-            logger.exception("Fehler im usage_callback")
+            logger.exception("Error in usage_callback")

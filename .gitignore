@@ -2,9 +2,19 @@
 __pycache__/
 *.pyc
 .env
+.env.*
 influx.env
 .venv/
 .pytest_cache/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+*.bak
+*.orig
+.DS_Store
+.idea/
+.vscode/
 
 # Lokale Copilot-Notizen (nur lokal, nicht im Repo)
 .copilot/

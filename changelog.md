@@ -1,25 +1,33 @@
 # Changelog
 
+## Unreleased
+
+- **Open-source maturity review**: MIT license (`LICENSE`), disclaimer ("independent open-source project, no affiliation with DeepSeek"), `CONTRIBUTING.md`, `pyproject.toml`, `.editorconfig`, `.pre-commit-config.yaml`, CI (`.github/workflows/ci.yml`).
+- **Split monofile**: the pure, Tkinter-free logic of `deepseek_rates_v2.4.0.py` was extracted into the `deepseek_monitor/` package (`config`, `i18n`, `paths`, `persistence`, `api`, `tariff`, `analytics`). The monofile is now a slim Tkinter frontend.
+- **Portable paths**: absolute `/home/admin` paths and internal IP addresses removed from tracked files (relative/`~` paths, placeholders).
+- **New app icon**: brand-neutral icon (`assets/deepseek-monitor.svg` + PNG sizes) instead of DeepSeek trademarks.
+- **Added tests**: `tests/test_deepseek_monitor.py` for tariff logic, API parsing, currency formatting and color helpers.
+
 ## 2.4.0 — 2026-09-25
 
-- Optionale **zentrale InfluxDB 2.x** als Datenquelle für die Detailseite „Kosten & Verbrauch" (multi-host).
-- **Konfigurations-Schalter über Env-Variablen** (keine Hardcodes): `DEEPSEEK_INFLUX_URL`, `DEEPSEEK_INFLUX_TOKEN`, `DEEPSEEK_INFLUX_ORG`, `DEEPSEEK_INFLUX_BUCKET`. Sind diese gesetzt, liest die App direkt aus InfluxDB (HTTP-Query-API, Flux); sonst weiterhin über den lokalen Proxy `/api/usage` (unverändertes Verhalten).
-- **Proxy-Schreibpfad**: neues Modul `deepseek-proxy/proxy/influx_sink.py`. Der Proxy schreibt die Usage zusätzlich in InfluxDB, wenn `--influx-url` (bzw. `DEEPSEEK_INFLUX_URL`) gesetzt ist. SQLite bleibt immer aktiv; Influx ist rein additiv und best effort.
-- Neues `host`-Tag (Hostname via `--host-name` bzw. `DEEPSEEK_INFLUX_HOST_NAME`), damit mehrere Entwicklungs-Hosts unterscheidbar sind.
-- Neues Feld `requests` (Wert 1) pro Event für spätere Tagesaggregation.
-- Dependency `influxdb-client` ergänzt.
-- Downsampling-Konzept vorbereitet: tägliche Aggregation über einen Flux-Task.
-- **Host-Filter** in der Detailseite (Dropdown „Host"), sichtbar nur im InfluxDB-Modus; listet alle Hosts und filtert die Daten je Host („Alle Hosts" = aggregiert über alle).
-- **GUI-Schalter „Datenquelle"** in den Einstellungen: umschalten zwischen „Lokal (Proxy/SQLite)" und „InfluxDB (zentral)" inkl. Eingabefeldern für URL/Token/Org/Bucket. Die Werte werden lokal in `~/.config/deepseek/influx_config` (Datei `0600`) persistiert; ohne GUI-Eintrag greifen weiterhin die Env-Variablen `DEEPSEEK_INFLUX_*`.
+- Optional **central InfluxDB 2.x** as the data source for the "Cost & Usage" detail page (multi-host).
+- **Configuration switch via environment variables** (no hardcodes): `DEEPSEEK_INFLUX_URL`, `DEEPSEEK_INFLUX_TOKEN`, `DEEPSEEK_INFLUX_ORG`, `DEEPSEEK_INFLUX_BUCKET`. When set, the app reads directly from InfluxDB (HTTP query API, Flux); otherwise still via the local proxy `/api/usage` (unchanged behavior).
+- **Proxy write path**: new module `deepseek-proxy/proxy/influx_sink.py`. The proxy additionally writes usage to InfluxDB when `--influx-url` (or `DEEPSEEK_INFLUX_URL`) is set. SQLite always stays active; Influx is purely additive and best effort.
+- New `host` tag (hostname via `--host-name` or `DEEPSEEK_INFLUX_HOST_NAME`) to distinguish multiple development hosts.
+- New field `requests` (value 1) per event for later daily aggregation.
+- Added dependency `influxdb-client`.
+- Downsampling concept prepared: daily aggregation via a Flux task.
+- **Host filter** on the detail page (dropdown "Host"), visible only in InfluxDB mode; lists all hosts and filters the data per host ("All hosts" = aggregated across all).
+- **GUI switch "Data source"** in the settings: toggle between "Local (Proxy/SQLite)" and "InfluxDB (central)" including input fields for URL/token/org/bucket. The values are persisted locally in `~/.config/deepseek/influx_config` (file `0600`); without a GUI entry the environment variables `DEEPSEEK_INFLUX_*` continue to apply.
 
 ## 2.3.0 — 2026-09-25
 
-- Die Detailseite „Kosten & Verbrauch" nutzt jetzt die **echten** Token-Usage-Daten des Proxys (`deepseek-proxy/`, HTTP `GET /api/usage`) statt der ungenauen Guthaben-Delta-Schätzung. Dadurch bleiben die Werte auch bei Tageswechsel korrekt, unabhängig davon, ob die App läuft.
-- Proxy-Basis-URL über Umgebungsvariable `DEEPSEEK_PROXY_URL` überschreibbar (Default `http://127.0.0.1:8000`).
-- Realtime-Balance-Kopf (Gesamt/Aufgeladen/Geschenkt) kommt weiterhin aus der `/user/balance`-API.
-- Intervalle-Tabelle zeigt jetzt einen Eintrag pro Request (statt zeitanteilig geschätzter Intervalle).
-- Bei nicht erreichbarem Proxy erscheint ein Hinweis statt der alten Schätzung.
-- Währung der Detailseite wechselt auf USD (Proxy rechnet USD pro 1M Token).
+- The "Cost & Usage" detail page now uses the **real** token usage data of the proxy (`deepseek-proxy/`, HTTP `GET /api/usage`) instead of the imprecise balance-delta estimate. This keeps the values correct across day changes, regardless of whether the app is running.
+- Proxy base URL overridable via the environment variable `DEEPSEEK_PROXY_URL` (default `http://127.0.0.1:8000`).
+- The realtime balance header (total/topped up/granted) still comes from the `/user/balance` API.
+- The intervals table now shows one entry per request (instead of proportionally estimated intervals).
+- When the proxy is unreachable, a hint appears instead of the old estimate.
+- The detail page currency switches to USD (the proxy calculates USD per 1M tokens).
 
 ## 2.2.9 — 2026-08-30
 

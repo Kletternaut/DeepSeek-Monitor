@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Einmaliger Live-Test: echte DeepSeek-Anthropic-Antwort inspizieren.
+"""One-off live test: inspect a real DeepSeek-Anthropic response.
 
-Liest den API-Key aus ~/.config/deepseek/api_key (wird NIE ausgegeben) und
-sendet einen kleinen Streaming-Request. Gibt ausschließlich die Usage-
-Feldnamen/Werte des Streams aus, damit wir das tatsächliche Format sehen.
+Reads the API key from ~/.config/deepseek/api_key (NEVER printed) and sends a
+small streaming request. Prints exclusively the usage field names/values of the
+stream so we can see the actual format.
 """
 
 import json
+import os
 import sys
 import urllib.request
 
-KEY_FILE = "/home/admin/.config/deepseek/api_key"
+KEY_FILE = os.path.expanduser("~/.config/deepseek/api_key")
 URL = "https://api.deepseek.com/anthropic/v1/messages"
 
 
@@ -22,7 +23,7 @@ def main() -> int:
         "model": "deepseek-flash",
         "max_tokens": 32,
         "stream": True,
-        "messages": [{"role": "user", "content": "Sag in einem Wort: Hallo"}],
+        "messages": [{"role": "user", "content": "Say in one word: Hello"}],
     }
     req = urllib.request.Request(
         URL,
@@ -35,17 +36,17 @@ def main() -> int:
         method="POST",
     )
 
-    print("== Request gesendet, lese Stream ... ==")
+    print("== Request sent, reading stream ... ==")
     with urllib.request.urlopen(req, timeout=60) as resp:
         print(f"HTTP {resp.status}, Content-Type: {resp.headers.get('Content-Type')}")
-        # Roh ausgeben (erste ~2000 Zeichen), damit wir das echte Format sehen.
+        # Print raw (first ~2000 chars) so we can see the real format.
         raw = resp.read().decode("utf-8", errors="replace")
-        print("== ROHE SSE-ANTWORT ==")
+        print("== RAW SSE RESPONSE ==")
         print(raw[:2000])
-        print("== ENDE ROHE ANTWORT ==")
+        print("== END RAW RESPONSE ==")
 
-        # Usage-Objekte extrahieren (nur Feldnamen + Werte, kein Key).
-        print("== USAGE-OBJEKTE IM STREAM ==")
+        # Extract usage objects (only field names + values, no key).
+        print("== USAGE OBJECTS IN STREAM ==")
         found = False
         for line in raw.splitlines():
             line = line.strip()

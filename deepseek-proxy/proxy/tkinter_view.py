@@ -1,23 +1,22 @@
-"""Eigenständige Tkinter-Detailseite für echte Usage- und Kostendaten.
+"""Standalone Tkinter detail page for real usage and cost data.
 
-Dieses Modul ist eine **read-only** Desktop-Ansicht auf dieselbe SQLite-DB, die
-der Proxy beschreibt. Es werden ausschließlich die **real aufgezeichneten**
-Usage-Events (Token + daraus berechnete Kosten) dargestellt -- es wird **keine**
-Balance-/Guthaben-Schätzung verwendet.
+This module is a **read-only** desktop view onto the same SQLite DB that the
+proxy writes. Only the **really recorded** usage events (tokens + costs
+calculated from them) are displayed -- **no** balance/credit estimate is used.
 
-Wichtig:
+Important:
 
-* Die GUI liest die DB nur; geschrieben wird ausschließlich vom Proxy-Server.
-* Die GUI startet **keinen** Proxy-Server. Der Server läuft separat (systemd-
-  Dienst oder eigenes Terminal).
-* Es gibt keinen globalen Zustand: die :class:`~proxy.storage.Storage` wird dem
-  Konstruktor explizit übergeben.
+* The GUI only reads the DB; only the proxy server writes.
+* The GUI starts **no** proxy server. The server runs separately (systemd
+  service or its own terminal).
+* There is no global state: the :class:`~proxy.storage.Storage` is passed to
+the constructor explicitly.
 
-Die gesamte Aggregationslogik ist in :func:`build_summary` gebündelt und damit
-**ohne** Tkinter testbar. Die GUI-Klasse :class:`UsageDetailApp` ruft nur
-:func:`build_summary` auf und rendert das Ergebnis.
+The entire aggregation logic is bundled in :func:`build_summary` and is thus
+testable **without** Tkinter. The GUI class :class:`UsageDetailApp` only calls
+:func:`build_summary` and renders the result.
 
-Öffentliche Symbole:
+Public symbols:
     * :func:`build_summary`
     * :class:`UsageDetailApp`
 """
@@ -41,10 +40,10 @@ __all__ = ["build_summary", "UsageDetailApp"]
 
 _BERLIN = ZoneInfo("Europe/Berlin")
 
-#: Rundung der USD-Kosten (identisch zu ``cost_calc``).
+#: Rounding of the USD cost (identical to ``cost_calc``).
 _COST_DECIMALS = 8
 
-# ------------------------------------------------------------------- Farben
+# ------------------------------------------------------------------- colors
 _BG = "#0f1115"
 _PANEL = "#171a21"
 _PANEL2 = "#1e222b"
@@ -58,7 +57,7 @@ _WARN = "#ffb454"
 
 # --------------------------------------------------------------------- Logik
 def _window_start(days: int) -> str:
-    """ISO-Startzeit ``now - days`` in Europe/Berlin (gleiches Format wie DB)."""
+    """ISO start time ``now - days`` in Europe/Berlin (same format as the DB)."""
     start = datetime.now(_BERLIN) - timedelta(days=max(0, days))
     return start.isoformat(timespec="seconds")
 
@@ -68,25 +67,24 @@ def build_summary(
     days: int = 7,
     fingerprint: str | None = None,
 ) -> dict:
-    """Aggregiert Kosten und Token über die letzten ``days`` Tage.
+    """Aggregate cost and tokens over the last ``days`` days.
 
-    Vorgehen (bewusst analog zu ``dashboard.api_summary``): Es wird über
-    :meth:`Storage.get_usage` **pro Event** gerechnet und selbst gruppiert.
-    Grund: Die Kosten hängen pro Event vom Zeitstempel (Peak/Off-Peak) und vom
-    Modell ab. :meth:`Storage.get_daily_usage` liefert nur Token-Summen pro Tag
-    und kann daher keine korrekten Kosten ableiten -- deshalb wird es hier
-    **nicht** verwendet.
+    Approach (deliberately analogous to ``dashboard.api_summary``): compute
+    per event via :meth:`Storage.get_usage` and group ourselves. Reason: the
+    cost depends per event on the timestamp (peak/off-peak) and the model.
+    :meth:`Storage.get_daily_usage` only returns token sums per day and
+    therefore cannot derive correct costs -- hence it is **not** used here.
 
-    Parameter:
-        storage: Datenquelle (nur lesend).
-        days: Zeitfenster in Tagen (Default 7).
-        fingerprint: Optionaler Filter auf ``api_key_fingerprint``.
+    Parameters:
+        storage: Data source (read-only).
+        days: Time window in days (default 7).
+        fingerprint: Optional filter on ``api_key_fingerprint``.
 
     Returns:
-        Dict mit ``days``, ``start``, ``total_cost``, ``total_input_tokens``,
+        Dict with ``days``, ``start``, ``total_cost``, ``total_input_tokens``,
         ``total_output_tokens``, ``total_cache_read_tokens``,
         ``total_cache_creation_tokens``, ``requests``, ``peak``,
-        ``off_peak``, ``daily``, ``per_label`` und ``labels``.
+        ``off_peak``, ``daily``, ``per_label`` and ``labels``.
     """
     pricing = load_pricing(storage)
     start = _window_start(days)
@@ -158,22 +156,22 @@ def build_summary(
 
 # ----------------------------------------------------------------- Formatter
 def _fmt_int(value: int) -> str:
-    """Formatiert eine Ganzzahl mit Tausenderpunkten."""
+    """Format an integer with thousands separators."""
     return f"{int(value):,}".replace(",", ".")
 
 
 def _fmt_usd(value: float) -> str:
-    """Formatiert einen USD-Betrag mit fester Nachkommastellenzahl."""
+    """Format a USD amount with a fixed number of decimal places."""
     return f"${float(value):.6f}"
 
 
 # ----------------------------------------------------------------------- GUI
 class UsageDetailApp:
-    """Read-only Tkinter-Detailansicht für echte Usage- und Kostendaten.
+    """Read-only Tkinter detail view for real usage and cost data.
 
-    Parameter:
-        storage: Datenquelle (nur lesend); wird explizit übergeben.
-        refresh_ms: Auto-Refresh-Intervall in Millisekunden (Default 60000).
+    Parameters:
+        storage: Data source (read-only); passed explicitly.
+        refresh_ms: Auto-refresh interval in milliseconds (default 60000).
     """
 
     def __init__(self, storage: Storage, refresh_ms: int = 60000) -> None:
@@ -185,12 +183,12 @@ class UsageDetailApp:
         self._after_id: str | None = None
 
         self._root = tk.Tk()
-        self._root.title("DeepSeek Kosten & Verbrauch (exakt)")
+        self._root.title("DeepSeek Cost & Usage (exact)")
         self._root.geometry("1000x740")
         self._root.configure(bg=_BG)
         self._root.minsize(760, 560)
 
-        self._last_updated = tk.StringVar(value="noch nicht aktualisiert")
+        self._last_updated = tk.StringVar(value="not yet updated")
         self._kpi_vars: dict[str, tk.StringVar] = {
             "total_cost": tk.StringVar(value="-"),
             "total_input_tokens": tk.StringVar(value="-"),
@@ -203,7 +201,7 @@ class UsageDetailApp:
             "off_peak_cost": tk.StringVar(value="-"),
             "off_peak_requests": tk.StringVar(value="-"),
         }
-        self._label_var = tk.StringVar(value="alle")
+        self._label_var = tk.StringVar(value="all")
         self._pricing_var = tk.StringVar(value="")
         self._daily_tree: ttk.Treeview | None = None
 
@@ -213,12 +211,12 @@ class UsageDetailApp:
 
     # ------------------------------------------------------------------ style
     def _setup_style(self) -> None:
-        """Konfiguriert ein dunkles ttk-Theme passend zum Web-Dashboard."""
+        """Configure a dark ttk theme matching the web dashboard."""
         style = ttk.Style(self._root)
         try:
             style.theme_use("clam")
-        except tk.TclError:  # pragma: no cover - nur bei exotischen Plattformen
-            logger.debug("ttk-Theme 'clam' nicht verfügbar, nutze Default.")
+        except tk.TclError:  # pragma: no cover - only on exotic platforms
+            logger.debug("ttk theme 'clam' not available, using default.")
 
         style.configure("TFrame", background=_BG)
         style.configure("Panel.TFrame", background=_PANEL)
@@ -276,12 +274,12 @@ class UsageDetailApp:
 
     # --------------------------------------------------------------- widgets
     def _build_widgets(self) -> None:
-        """Baut die statische Widget-Struktur auf."""
+        """Build the static widget structure."""
         header = ttk.Frame(self._root, style="TFrame", padding=(18, 14, 18, 6))
         header.pack(fill="x")
         ttk.Label(
             header,
-            text="DeepSeek Kosten & Verbrauch (exakt)",
+            text="DeepSeek Cost & Usage (exact)",
             style="Title.TLabel",
         ).pack(anchor="w")
         ttk.Label(
@@ -298,9 +296,9 @@ class UsageDetailApp:
         kpi.pack(fill="x")
         for idx, (key, title) in enumerate(
             (
-                ("total_cost", "Gesamtkosten"),
-                ("total_input_tokens", "Input-Token"),
-                ("total_output_tokens", "Output-Token"),
+                ("total_cost", "Total cost"),
+                ("total_input_tokens", "Input tokens"),
+                ("total_output_tokens", "Output tokens"),
                 ("requests", "Requests"),
             )
         ):
@@ -325,8 +323,8 @@ class UsageDetailApp:
             self._peak_vars["off_peak_cost"], self._peak_vars["off_peak_requests"],
         )
 
-        # Tagesaufschlüsselung -------------------------------------------
-        ttk.Label(body, text="Tagesaufschlüsselung", style="TLabel").pack(
+        # Daily breakdown -------------------------------------------
+        ttk.Label(body, text="Daily breakdown", style="TLabel").pack(
             anchor="w", pady=(16, 6)
         )
         table_frame = ttk.Frame(body, style="TFrame")
@@ -337,10 +335,10 @@ class UsageDetailApp:
             table_frame, columns=columns, show="headings", height=8
         )
         headings = {
-            "date": "Datum",
-            "cost": "Kosten",
-            "input": "Input-Token",
-            "output": "Output-Token",
+            "date": "Date",
+            "cost": "Cost",
+            "input": "Input tokens",
+            "output": "Output tokens",
             "requests": "Requests",
         }
         for col in columns:
@@ -362,7 +360,7 @@ class UsageDetailApp:
         footer = ttk.Frame(body, style="Panel.TFrame", padding=(12, 10, 12, 10))
         footer.pack(fill="x", pady=(12, 0))
 
-        ttk.Label(footer, text="Label-Filter:", style="PanelMuted.TLabel").pack(
+        ttk.Label(footer, text="Label filter:", style="PanelMuted.TLabel").pack(
             side="left"
         )
         self._label_combo = ttk.Combobox(
@@ -386,7 +384,7 @@ class UsageDetailApp:
         value_var: tk.StringVar,
         value_style: str,
     ) -> None:
-        """Erzeugt eine KPI-Karte in Spalte ``column``."""
+        """Create a KPI card in column ``column``."""
         pad = (0, 8, 0, 0) if column == 0 else (8, 8, 0, 0)
         card = ttk.Frame(parent, style="Card.TFrame", padding=(14, 12, 14, 12))
         card.grid(row=0, column=column, sticky="nsew", padx=pad)
@@ -404,7 +402,7 @@ class UsageDetailApp:
         cost_var: tk.StringVar,
         requests_var: tk.StringVar,
     ) -> None:
-        """Erzeugt eine Peak-/Off-Peak-Karte in Spalte ``column``."""
+        """Create a peak/off-peak card in column ``column``."""
         pad = (0, 8, 0, 0) if column == 0 else (8, 8, 0, 0)
         card = ttk.Frame(parent, style="Card.TFrame", padding=(14, 12, 14, 12))
         card.grid(row=0, column=column, sticky="nsew", padx=pad)
@@ -418,28 +416,28 @@ class UsageDetailApp:
 
     # -------------------------------------------------------------- refresh
     def _on_label_selected(self, _event: object | None = None) -> None:
-        """Reagiert auf die Label-Auswahl und aktualisiert die Ansicht."""
+        """React to the label selection and update the view."""
         label = self._label_var.get()
-        if label == "alle":
+        if label == "all":
             self._fingerprint = None
         else:
             self._fingerprint = self._label_to_fp.get(label)
         self._refresh()
 
     def refresh(self) -> None:
-        """Öffentlicher Refresh-Einstieg (auch für Auto-Refresh nutzbar)."""
+        """Public refresh entry point (also usable for auto-refresh)."""
         self._refresh()
 
     def _refresh(self) -> None:
-        """Liest die Zusammenfassung und aktualisiert alle Widgets."""
+        """Read the summary and update all widgets."""
         try:
             summary = build_summary(
                 self._storage, days=self._days, fingerprint=self._fingerprint
             )
-        except Exception:  # noqa: BLE001 - GUI darf nie hart abstürzen
-            logger.exception("build_summary fehlgeschlagen")
+        except Exception:  # noqa: BLE001 - GUI must never hard-crash
+            logger.exception("build_summary failed")
             self._last_updated.set(
-                "Fehler beim Lesen der Datenbank (siehe Log)"
+                "Error reading the database (see log)"
             )
             self._schedule_refresh()
             return
@@ -452,35 +450,35 @@ class UsageDetailApp:
 
         now = datetime.now(_BERLIN).strftime("%Y-%m-%d %H:%M:%S")
         self._last_updated.set(
-            f"Letzte Aktualisierung: {now}  ·  Zeitraum: letzte {self._days} Tage"
+            f"Last update: {now}  ·  Period: last {self._days} days"
             f"  ·  {summary['requests']} Requests"
         )
         self._schedule_refresh()
 
     def _schedule_refresh(self) -> None:
-        """Plant den nächsten Auto-Refresh."""
+        """Schedule the next auto-refresh."""
         if self._after_id is not None:
             try:
                 self._root.after_cancel(self._after_id)
-            except tk.TclError:  # pragma: no cover - Fenster bereits zerstört
+            except tk.TclError:  # pragma: no cover - window already destroyed
                 pass
         self._after_id = self._root.after(self._refresh_ms, self._refresh)
 
     def _update_label_combo(self, summary: dict) -> None:
-        """Aktualisiert Dropdown-Werte (Labels + ``alle``) und die Zuordnung."""
+        """Update dropdown values (labels + ``all``) and the mapping."""
         self._label_to_fp = {
             resolve_label(self._storage, fp): fp
             for fp in self._storage.get_distinct_fingerprints()
         }
-        values = ["alle", *sorted(self._label_to_fp)]
+        values = ["all", *sorted(self._label_to_fp)]
         current = self._label_var.get()
         self._label_combo.configure(values=values)
         if current not in values:
-            self._label_var.set("alle")
+            self._label_var.set("all")
             self._fingerprint = None
 
     def _update_kpis(self, summary: dict) -> None:
-        """Setzt die KPI-Werte."""
+        """Set the KPI values."""
         self._kpi_vars["total_cost"].set(_fmt_usd(summary["total_cost"]))
         self._kpi_vars["total_input_tokens"].set(
             _fmt_int(summary["total_input_tokens"])
@@ -491,7 +489,7 @@ class UsageDetailApp:
         self._kpi_vars["requests"].set(_fmt_int(summary["requests"]))
 
     def _update_tariffs(self, summary: dict) -> None:
-        """Setzt die Peak-/Off-Peak-Werte."""
+        """Set the peak/off-peak values."""
         peak = summary["peak"]
         off_peak = summary["off_peak"]
         self._peak_vars["peak_cost"].set(_fmt_usd(peak["cost"]))
@@ -504,7 +502,7 @@ class UsageDetailApp:
         )
 
     def _update_daily(self, summary: dict) -> None:
-        """Füllt die Tages-Tabelle neu."""
+        """Refill the daily table."""
         tree = self._daily_tree
         if tree is None:  # pragma: no cover - defensive
             return

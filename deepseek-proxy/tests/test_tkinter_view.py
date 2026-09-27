@@ -1,4 +1,4 @@
-"""Tests für die reine Aggregationslogik build_summary (Tkinter-Detailseite)."""
+"""Tests for the pure aggregation logic build_summary (Tkinter detail page)."""
 
 from proxy.labels import fingerprint_key
 from proxy.storage import Storage

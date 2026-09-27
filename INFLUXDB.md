@@ -1,59 +1,59 @@
-# InfluxDB-Integration — Dokumentation
+# InfluxDB integration — documentation
 
-> Stand: 2026-09-25 · betrifft `deepseek_rates_v2.4.0.py` und `deepseek-proxy/`
+> Status: 2026-09-25 · applies to `deepseek_rates_v2.4.0.py` and `deepseek-proxy/`
 
-Diese Dokumentation beschreibt die Architektur, Konfiguration und Bedienung der
-InfluxDB-2.x-Integration für die DeepSeek-Kostenüberwachung.
+This documentation describes the architecture, configuration and operation of
+the InfluxDB 2.x integration for DeepSeek cost monitoring.
 
 ---
 
-## 1. Überblick
+## 1. Overview
 
-Ursprünglich speicherte der Proxy die Token-Usage nur in **SQLite** (lokal, je
-Host). Für ein **Multi-Host-/Multi-User-Szenario** (mehrere Entwicklungs-Rechner,
-die nicht dauerhaft laufen) wurde eine **zentrale InfluxDB 2.x** angebunden:
+Originally the proxy stored token usage only in **SQLite** (locally, per host).
+For a **multi-host/multi-user scenario** (several development machines that do
+not run permanently), a **central InfluxDB 2.x** was added:
 
 ```
 Host A (VS Code + Proxy) ─┐
-Host B (VS Code + Proxy) ─┼─► InfluxDB 2.x (permanent) ◄─ Detailseite „Kosten & Verbrauch"
+Host B (VS Code + Proxy) ─┼─► InfluxDB 2.x (permanent) ◄─ "Cost & Usage" detail page
 Host C (VS Code + Proxy) ─┘        (write)                 (read)
 ```
 
-- **Schreiben**: Jeder lokale Proxy schreibt (zusätzlich zu SQLite) in die
-  zentrale InfluxDB.
-- **Lesen**: Die Monitor-App liest — je nach Konfiguration — aus InfluxDB
-  (zentral, host-übergreifend) oder aus dem lokalen Proxy/SQLite.
+- **Write**: each local proxy writes (in addition to SQLite) to the central
+  InfluxDB.
+- **Read**: the monitor app reads — depending on configuration — from InfluxDB
+  (central, across hosts) or from the local proxy/SQLite.
 
 ---
 
-## 2. Zwei getrennte Schalter (wichtig!)
+## 2. Two separate switches (important!)
 
-Es gibt **zwei unabhängige** Konfigurationspunkte:
+There are **two independent** configuration points:
 
-| Komponente | Wo | Was sie steuert |
+| Component | Where | What it controls |
 |---|---|---|
-| **Proxy** | `deepseek-proxy/influx.env` + systemd-Unit | Ob **zusätzlich** in InfluxDB **geschrieben** wird |
-| **App** (Monitor) | GUI-Einstellungen → „Datenquelle" | Wo **gelesen** wird (Influx oder lokaler Proxy→SQLite) |
+| **Proxy** | `deepseek-proxy/influx.env` + systemd unit | Whether usage is **additionally written** to InfluxDB |
+| **App** (monitor) | GUI settings → "Data source" | Where data is **read** (Influx or local proxy→SQLite) |
 
-Der **Proxy kennt keinen Influx/SQLite-Umschalter** — SQLite ist immer aktiv,
-Influx ist rein additiv.
+The **proxy has no Influx/SQLite switch** — SQLite is always active, Influx is
+purely additive.
 
 ---
 
-## 3. Proxy: Schreiben konfigurieren
+## 3. Proxy: configure writing
 
-### Datei-Layout
+### File layout
 
 ```
 deepseek-proxy/
-├── main.py                       # Einstieg; Flags + _build_usage_callback
-├── deepseek-proxy.service        # systemd-Unit (referenziert influx.env)
-├── influx.env                    # Influx-Zugangsdaten (0600, NICHT committen)
+├── main.py                       # entry point; flags + _build_usage_callback
+├── deepseek-proxy.service        # systemd unit (references influx.env)
+├── influx.env                    # Influx credentials (0600, NOT committed)
 └── proxy/
     └── influx_sink.py            # InfluxSink (lazy import influxdb-client)
 ```
 
-### `influx.env` (Secret, Rechte 0600)
+### `influx.env` (secret, permissions 0600)
 
 ```ini
 DEEPSEEK_INFLUX_URL=http://<INFLUX_HOST>:8086
@@ -64,7 +64,7 @@ DEEPSEEK_INFLUX_BUCKET=<BUCKET>
 # DEEPSEEK_INFLUX_HOST_NAME=<hostname>
 ```
 
-### systemd-Unit (Auszug)
+### systemd unit (excerpt)
 
 ```ini
 [Service]
@@ -72,16 +72,16 @@ ExecStart=$HOME/deepseek/deepseek-proxy/.venv/bin/python $HOME/deepseek/deepseek
 EnvironmentFile=-$HOME/deepseek/deepseek-proxy/influx.env
 ```
 
-> Das führende `-` bei `EnvironmentFile=-...` bedeutet: kein Fehler, wenn die
-> Datei fehlt (→ Proxy läuft dann automatisch SQLite-only).
+> The leading `-` in `EnvironmentFile=-...` means: no error if the file is
+> missing (→ the proxy then automatically runs SQLite-only).
 
-### Influx ein-/ausschalten
+### Enable/disable Influx
 
-- **An:** `influx.env` vorhanden + `EnvironmentFile` gesetzt (aktueller Zustand).
-- **Aus:** `influx.env` leeren/entfernen **oder** `EnvironmentFile`-Zeile aus der
-  Unit entfernen → Proxy schreibt nur noch SQLite.
+- **On:** `influx.env` present + `EnvironmentFile` set (current state).
+- **Off:** empty/remove `influx.env` **or** remove the `EnvironmentFile` line
+  from the unit → proxy writes only SQLite.
 
-### Alternative: Start-Argumente (ohne systemd/env)
+### Alternative: start arguments (without systemd/env)
 
 ```bash
 .venv/bin/python main.py \
@@ -92,103 +92,103 @@ EnvironmentFile=-$HOME/deepseek/deepseek-proxy/influx.env
   --host-name <hostname>
 ```
 
-### Nach Änderung
+### After a change
 
 ```bash
 sudo cp deepseek-proxy.service /etc/systemd/system/deepseek-proxy.service
 sudo systemctl daemon-reload
 sudo systemctl restart deepseek-proxy
-journalctl -u deepseek-proxy -f   # Log: „InfluxDB-Sink aktiviert …"
+journalctl -u deepseek-proxy -f   # log: "InfluxDB sink enabled …"
 ```
 
 ### SQLite
 
-Immer aktiv, keine Konfiguration nötig. Pfad: `~/.local/state/deepseek/usage.db`
-(überschreibbar per `--db`).
+Always active, no configuration required. Path: `~/.local/state/deepseek/usage.db`
+(overridable via `--db`).
 
 ---
 
-## 4. App (Monitor): Lesen konfigurieren
+## 4. App (monitor): configure reading
 
-### GUI-Einstellungen
+### GUI settings
 
-Öffnen über das ⚙-Symbol im Mini-Tarif-Fenster → Sektion **„Datenquelle"**:
+Open via the ⚙ symbol in the mini tariff window → section **"Data source"**:
 
-- **Auswahl:** „Lokal (Proxy/SQLite)" ↔ „InfluxDB (zentral)".
-- **Felder** (bei Influx): URL, Token (verdeckt), Organisation, Bucket.
-- **„Übernehmen"** speichert und lädt sofort neu.
+- **Selection:** "Local (Proxy/SQLite)" ↔ "InfluxDB (central)".
+- **Fields** (for Influx): URL, token (hidden), organization, bucket.
+- **"Apply"** saves and reloads immediately.
 
-Empfohlene Werte:
+Recommended values:
 
-| Feld | Wert |
+| Field | Value |
 |---|---|
 | URL | `http://<INFLUX_HOST>:8086` |
-| Token | Influx-API-Token |
-| Organisation | `<ORG>` |
+| Token | Influx API token |
+| Organization | `<ORG>` |
 | Bucket | `<BUCKET>` |
 
-### Priorität der Konfiguration
+### Configuration priority
 
-1. **GUI-Eintrag** (persistiert in `~/.config/deepseek/influx_config`, Rechte 0600).
-2. Sonst **Env-Variablen** `DEEPSEEK_INFLUX_URL/TOKEN/ORG/BUCKET`.
-3. Sonst **Lokal (Proxy/SQLite)** — Default.
+1. **GUI entry** (persisted in `~/.config/deepseek/influx_config`, permissions 0600).
+2. Otherwise **environment variables** `DEEPSEEK_INFLUX_URL/TOKEN/ORG/BUCKET`.
+3. Otherwise **Local (Proxy/SQLite)** — default.
 
-„Lokal" wählen löscht die persistierte Influx-Konfiguration wieder.
+Selecting "Local" deletes the persisted Influx configuration again.
 
-### Host-Filter
+### Host filter
 
-Im InfluxDB-Modus erscheint im Fenster „Kosten & Verbrauch" ein **Host-Dropdown**
-(oben links). Es listet alle bekannten Hosts; „Alle Hosts" = aggregiert über alle.
+In InfluxDB mode, a **host dropdown** (top left) appears in the "Cost & Usage"
+window. It lists all known hosts; "All hosts" = aggregated across all.
 
 ---
 
-## 5. Datenmodell (InfluxDB)
+## 5. Data model (InfluxDB)
 
 - **Measurement:** `usage`
 - **Tags:** `host`, `model`, `fingerprint`, `tariff` (`peak`/`off_peak`)
 - **Fields:** `input_tokens`, `output_tokens`, `cache_read_tokens`,
   `cache_creation_tokens`, `total_tokens`, `cost_usd`, `requests`
-- **Timestamp:** Event-Zeit (Berlin-ISO wird korrekt geparst)
+- **Timestamp:** event time (Berlin ISO is parsed correctly)
 
 ---
 
-## 6. Wichtige Dateien (Übersicht)
+## 6. Important files (overview)
 
-| Datei | Zweck |
+| File | Purpose |
 |---|---|
-| `deepseek_rates_v2.4.0.py` | App, Env-Schalter + GUI-Schalter + Host-Filter |
+| `deepseek_rates_v2.4.0.py` | App, env switch + GUI switch + host filter |
 | `deepseek_rates_latest.py` | Symlink → `deepseek_rates_v2.4.0.py` |
-| `deepseek-proxy/proxy/influx_sink.py` | Schreib-Sink (InfluxSink) |
-| `deepseek-proxy/main.py` | Flags + kombinierter Callback |
-| `deepseek-proxy/influx.env` | Influx-Zugangsdaten (Secret, 0600, ignoriert) |
-| `deepseek-proxy/deepseek-proxy.service` | systemd-Unit (EnvironmentFile) |
+| `deepseek-proxy/proxy/influx_sink.py` | Write sink (InfluxSink) |
+| `deepseek-proxy/main.py` | Flags + combined callback |
+| `deepseek-proxy/influx.env` | Influx credentials (secret, 0600, ignored) |
+| `deepseek-proxy/deepseek-proxy.service` | systemd unit (EnvironmentFile) |
 | `deepseek-proxy/requirements.txt` | + `influxdb-client>=1.39` |
-| `deepseek-proxy/tests/test_influx_sink.py` | Tests (Parser/Mapping/Sink) |
-| `~/.config/deepseek/influx_config` | App-seitige persistierte Influx-Config (0600) |
-| `.env.example` | Vorlage für App-Env-Variablen |
+| `deepseek-proxy/tests/test_influx_sink.py` | Tests (parser/mapping/sink) |
+| `~/.config/deepseek/influx_config` | App-side persisted Influx config (0600) |
+| `.env.example` | Template for app environment variables |
 
 ---
 
-## 7. Sicherheit
+## 7. Security
 
-- Das Influx-**Token** liegt **nur** in `influx.env` (Proxy) bzw. `influx_config`
-  (App), beide mit Rechten `0600` und per `.gitignore` ausgeschlossen.
-- Keine Zugangsdaten im Code.
-- **Empfehlung:** Token nach der Einrichtung auf der InfluxDB-Instanz rotieren,
-  da es im Chat-/Terminal-Verlauf sichtbar war.
+- The Influx **token** lives **only** in `influx.env` (proxy) or `influx_config`
+  (app), both with permissions `0600` and excluded via `.gitignore`.
+- No credentials in code.
+- **Recommendation:** rotate the token on the InfluxDB instance after setup,
+  since it was visible in the chat/terminal history.
 
 ---
 
-## 8. Betrieb / Verifikation
+## 8. Operation / verification
 
-1. Proxy läuft: `systemctl is-active deepseek-proxy` → `active`.
-2. Influx-Sink aktiv: `journalctl -u deepseek-proxy | grep "InfluxDB-Sink"`.
-3. Daten vorhanden:
+1. Proxy running: `systemctl is-active deepseek-proxy` → `active`.
+2. Influx sink active: `journalctl -u deepseek-proxy | grep "InfluxDB-Sink"`.
+3. Data present:
    ```bash
    curl -s -X POST "http://<INFLUX_HOST>:8086/api/v2/query?org=<ORG>" \
      -H "Authorization: Token <TOKEN>" -H "Accept: application/csv" \
      -H "Content-Type: application/json" \
      -d '{"query":"from(bucket: \"<BUCKET>\") |> range(start: -1h) |> filter(fn: (r) => r._measurement == \"usage\") |> count()"}'
    ```
-4. App starten → „C" (Kosten & Verbrauch) → Daten aus InfluxDB bzw. lokal.
-5. Tests: `cd deepseek-proxy && .venv/bin/python -m pytest -q` → 81 grün.
+4. Start the app → "C" (Cost & Usage) → data from InfluxDB or locally.
+5. Tests: `cd deepseek-proxy && .venv/bin/python -m pytest -q` → 81 green.

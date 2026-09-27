@@ -1,12 +1,12 @@
-"""Kostenberechnung aus Token-Nutzung und Preis-Tabelle.
+"""Cost calculation from token usage and the price table.
 
-Berechnet für einzelne :class:`~proxy.usage.TokenUsage`-Events die Kosten in USD
-und aggregiert Listen von Events.
+Computes the cost in USD for individual :class:`~proxy.usage.TokenUsage` events
+and aggregates lists of events.
 
-Hinweis: :mod:`proxy.storage` wird hier absichtlich NICHT importiert, um einen
-Zirkularimport zu vermeiden. Preise kommen aus :mod:`proxy.pricing`.
+Note: :mod:`proxy.storage` is deliberately NOT imported here to avoid a
+circular import. Prices come from :mod:`proxy.pricing`.
 
-Öffentliche Symbole:
+Public symbols:
     * :func:`calc_usage_cost`
     * :func:`calc_costs`
 """
@@ -22,22 +22,22 @@ logger = logging.getLogger("deepseek_proxy.cost_calc")
 
 __all__ = ["calc_usage_cost", "calc_costs"]
 
-#: Rundung der USD-Kosten (Nachkommastellen).
+#: Rounding of the USD cost (decimal places).
 _COST_DECIMALS = 8
 
 
 def _cache_token_split(usage: TokenUsage) -> tuple[int, int]:
-    """Aufteilung in ``(cache_miss_tokens, cache_hit_tokens)``.
+    """Split into ``(cache_miss_tokens, cache_hit_tokens)``.
 
-    WICHTIG (DeepSeek-Anthropic-Eigenheit): Anders als bei Standard-Anthropic ist
-    ``input_tokens`` hier NICHT die Gesamt-Eingabe, sondern nur der NICHT
-    gecachte Anteil (Cache MISS). ``cache_read_input_tokens`` ist der gecachte
-    Anteil (Cache HIT). Beide sind additiv, nicht verschachtelt.
+    IMPORTANT (DeepSeek-Anthropic peculiarity): unlike standard Anthropic,
+    ``input_tokens`` here is NOT the total input, but only the NON-cached share
+    (cache MISS). ``cache_read_input_tokens`` is the cached share (cache HIT).
+    Both are additive, not nested.
 
-    Beleg (reale Daten): ``cache_read_input_tokens`` (≈181k) kann ``input_tokens``
-    (≈8k) deutlich übersteigen -- nur möglich, wenn ``input_tokens`` nicht die
-    Gesamtsumme ist. ``cache_creation_input_tokens`` ist bei DeepSeek beobachtet
-    immer 0 (wird in ``input_tokens`` eingerechnet).
+    Evidence (real data): ``cache_read_input_tokens`` (≈181k) can clearly
+exceed ``input_tokens`` (≈8k) -- only possible if ``input_tokens`` is not the
+total. ``cache_creation_input_tokens`` is observed to always be 0 for DeepSeek
+(included in ``input_tokens``).
     """
     miss_tokens = max(0, int(usage.input_tokens))
     hit_tokens = max(0, int(usage.cache_read_input_tokens))
@@ -45,7 +45,7 @@ def _cache_token_split(usage: TokenUsage) -> tuple[int, int]:
 
 
 def calc_usage_cost(usage: TokenUsage, pricing: dict | None = None) -> float:
-    """Berechnet die Kosten eines Requests in USD.
+    """Compute the cost of a request in USD.
 
     ``cost = (miss * cache_miss + hit * cache_hit + output * output) / 1e6``.
     """
@@ -62,12 +62,12 @@ def calc_usage_cost(usage: TokenUsage, pricing: dict | None = None) -> float:
 
 
 def calc_costs(usages: list[TokenUsage], pricing: dict | None = None) -> dict:
-    """Aggregiert die Kosten über eine Liste von Usage-Events.
+    """Aggregate the cost over a list of usage events.
 
     Returns:
-        Dict mit ``total_cost``, ``total_input_tokens``, ``total_output_tokens``,
+        Dict with ``total_cost``, ``total_input_tokens``, ``total_output_tokens``,
         ``total_cache_read_tokens``, ``total_cache_creation_tokens``,
-        ``requests`` und ``per_model`` (Mapping Modellname → ``cost``,
+        ``requests`` and ``per_model`` (mapping model name → ``cost``,
         ``input_tokens``, ``output_tokens``, ``requests``).
     """
     total_cost = 0.0

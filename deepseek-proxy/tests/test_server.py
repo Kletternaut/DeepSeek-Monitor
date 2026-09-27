@@ -1,7 +1,7 @@
-"""Integrationstest für den Proxy-Server (Transparenz + Usage-Extraktion).
+"""Integration test for the proxy server (transparency + usage extraction).
 
-Der Upstream wird über ``httpx.MockTransport`` simuliert; die FastAPI-App des
-Proxy wird über ``ASGITransport`` ohne echten Netzwerk-Socket aufgerufen.
+The upstream is simulated via ``httpx.MockTransport``; the FastAPI app of the
+proxy is called via ``ASGITransport`` without a real network socket.
 """
 
 import asyncio
@@ -60,12 +60,12 @@ def _make_mock_transport(captured):
 
 
 def _fake_async_client_factory(mock_transport):
-    """Patch-Fabrik: Server-Client bekommt den Mock, Test-Client läuft normal durch."""
+    """Patch factory: server client gets the mock, test client runs normally."""
     real = httpx.AsyncClient
 
     def factory(*args, **kwargs):
         if "transport" in kwargs:
-            # eigener Test-Client -> unverändert
+            # own test client -> unchanged
             return real(*args, **kwargs)
         # Server-interner Client -> Mock-Transport injizieren
         return real(*args, transport=mock_transport, **kwargs)
@@ -106,7 +106,7 @@ def test_transparent_passthrough_and_usage():
             )
             streamed = await resp.aread()
 
-        # 1) Body bytegenau unverändert durchgereicht.
+        # 1) Body passed through byte-exact and unchanged.
         assert streamed == SSE_BODY
         assert resp.status_code == 200
         assert resp.headers["content-type"].startswith("text/event-stream")

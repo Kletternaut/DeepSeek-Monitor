@@ -1,32 +1,47 @@
 # DeepSeek-Monitor
 
-Überwachung der DeepSeek-API-Nutzung — bestehend aus zwei Komponenten:
+> **Note:** This project is an independent open-source project and is in **no
+> way affiliated with DeepSeek (深度求索)**. It is not developed, sponsored,
+> endorsed, or operated by DeepSeek.
 
-| Komponente | Datei | Aufgabe |
+Monitor DeepSeek API usage — consisting of two components:
+
+| Component | File | Purpose |
 |---|---|---|
-| **Proxy** | `deepseek-proxy/` | Streaming-Proxy (VS Code → DeepSeek), zeichnet Token-Usage auf, schreibt SQLite + optional InfluxDB |
-| **Monitor** | `deepseek_rates_latest.py` → `deepseek_rates_v2.4.0.py` | Tkinter-App „Kosten & Verbrauch", liest aus lokalem Proxy/SQLite oder zentraler InfluxDB |
+| **Proxy** | `deepseek-proxy/` | Streaming proxy (VS Code → DeepSeek), records token usage, writes SQLite + optionally InfluxDB |
+| **Monitor** | `deepseek_rates_latest.py` → `deepseek_rates_v2.4.0.py` | Tkinter app "Cost & Usage", reads from the local proxy/SQLite or a central InfluxDB |
 
-## Architektur
+## Architecture
 
 ```
 Host A (VS Code + Proxy) ─┐
-Host B (VS Code + Proxy) ─┼─► InfluxDB 2.x (permanent) ◄─ Monitor „Kosten & Verbrauch"
+Host B (VS Code + Proxy) ─┼─► InfluxDB 2.x (permanent) ◄─ Monitor "Cost & Usage"
 Host C (VS Code + Proxy) ─┘        (write)                 (read)
 ```
 
-- **Proxy schreibt** immer SQLite, zusätzlich InfluxDB, wenn `influx.env`
-  vorhanden ist (`DEEPSEEK_INFLUX_URL/TOKEN/ORG/BUCKET`).
-- **Monitor liest** je nach GUI-Einstellung „Lokal (Proxy/SQLite)" oder
-  „InfluxDB (zentral)".
+- **The proxy always writes** SQLite, plus InfluxDB if `influx.env` is present
+  (`DEEPSEEK_INFLUX_URL/TOKEN/ORG/BUCKET`).
+- **The monitor reads** either "Local (Proxy/SQLite)" or "InfluxDB (central)"
+  depending on the GUI setting.
 
-## Dokumentation
+## Screenshots
 
-| Datei | Inhalt |
+The monitor app (Tkinter) — main tariff widget, "Cost & Usage" window, settings
+and the full overview:
+
+| Main widget | Cost & Usage | Settings |
+|---|---|---|
+| ![Main](screenshots/main.png) | ![Cost & Usage](screenshots/costs-usage.png) | ![Settings](screenshots/settings.png) |
+
+![All windows](screenshots/all.png)
+
+## Documentation
+
+| File | Content |
 |---|---|
-| [`INSTALLATION.md`](INSTALLATION.md) | Installation (Proxy, Monitor, systemd, VS Code) |
-| [`INFLUXDB.md`](INFLUXDB.md) | InfluxDB-2.x-Integration im Detail |
-| [`STRUCTURE.md`](STRUCTURE.md) | Verzeichnis-/Datei-Referenz |
+| [`INSTALLATION.md`](INSTALLATION.md) | Installation (proxy, monitor, systemd, VS Code) |
+| [`INFLUXDB.md`](INFLUXDB.md) | InfluxDB 2.x integration in detail |
+| [`STRUCTURE.md`](STRUCTURE.md) | Directory/file reference |
 
 ## Quickstart
 
@@ -38,5 +53,13 @@ sudo cp deepseek-proxy.service /etc/systemd/system/
 sudo systemctl enable --now deepseek-proxy
 ```
 
-Vollständige Schritte (inkl. `influx.env`, VS-Code-Setup und Monitor-Start):
-siehe **[`INSTALLATION.md`](INSTALLATION.md)**.
+For the full steps (including `influx.env`, VS Code setup and starting the
+monitor): see **[`INSTALLATION.md`](INSTALLATION.md)**.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).

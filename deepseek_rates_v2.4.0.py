@@ -4,1620 +4,168 @@
 """
 DeepSeek Monitor + Realtime Balance + Analytics
 
-Verbesserungen gegenüber der ursprünglichen Version:
-- Tarifberechnung ohne unnötige 9-Tage-Neuberechnung pro Sekunde
-- Timeline wird nur bei Minutenwechsel/Zeitzonenwechsel neu gezeichnet
-- History bleibt im Speicher und wird nicht bei jedem Poll erneut eingelesen
-- atomisches Schreiben von JSON/CSV
-- sauber beendbarer Hintergrund-Thread
-- keine Tkinter-Zugriffe aus dem Worker-Thread
-- neue Analytics-Ansicht:
-    * Peak-/Standard-/Wochenend-Verbrauch
-    * Tagesauswertung
-    * geschätzte vermeidbare Peak-Kosten
-    * letzte Verbrauchsintervalle
-    * Transparenz über die zugrunde liegende Annahme
-- akustische Warnung 60 Sekunden vor einem echten Tarifwechsel
-- API-/Netzwerkfehler behalten den letzten guten Balance-Stand
-- Zeitintervalle werden anteilig auf Tarifzonen verteilt
-- Wochenendlogik und DST werden bei der Tarifberechnung berücksichtigt
+Improvements over the original version:
+- tariff calculation without an unnecessary 9-day recomputation every second
+- timeline is redrawn only on minute/timezone changes
+- history stays in memory and is not re-read on every poll
+- atomic writes of JSON/CSV
+- cleanly terminable background thread
+- no Tkinter access from the worker thread
+- new analytics view:
+    * peak/standard/weekend usage
+    * daily breakdown
+    * estimated avoidable peak cost
+    * latest usage intervals
+    * transparency about the underlying assumption
+- acoustic warning 60 seconds before a real tariff change
+- API/network errors keep the last good balance state
+- time intervals are distributed proportionally over tariff zones
+- weekend logic and DST are respected in the tariff calculation
 
-WICHTIG ZUR ANALYTIK:
-Die DeepSeek /user/balance API liefert Guthabenstände. Daraus wird Verbrauch als
-Guthabenverlust zwischen zwei Messpunkten abgeleitet. Der Zeitraum zwischen zwei
-Messpunkten wird dabei zeitanteilig auf die jeweiligen Tarifzonen verteilt.
+IMPORTANT ABOUT THE ANALYTICS:
+The DeepSeek /user/balance API returns balance values. Usage is derived from the
+balance loss between two measurement points. The period between two measurement
+points is distributed proportionally over the respective tariff zones.
 
-Das bedeutet:
-- Die Kostenanalyse ist eine SCHÄTZUNG, solange nur periodische Balance-Werte vorliegen.
-- Ein Verbrauchsintervall kann bei einem Tarifwechsel über mehrere Zonen gehen.
-- "Potenzielle Ersparnis" ist die vermiedene Peak-Prämie unter der Annahme,
-  dass derselbe Verbrauch im Standardfenster hätte stattfinden können.
-- PEAK_MULTIPLIER = 2.0 entspricht der im ursprünglichen Tool verwendeten 2x-Annahme.
-  Falls DeepSeek künftig andere Faktoren verwendet, hier anpassen.
+This means:
+- The cost analysis is an ESTIMATE as long as only periodic balance values exist.
+- A usage interval can span multiple zones across a tariff change.
+- "Potential saving" is the avoidable peak premium under the assumption that the
+  same usage could have taken place in the standard window.
+- PEAK_MULTIPLIER = 2.0 matches the 2x assumption used in the original tool.
+  If DeepSeek uses different factors in the future, adjust here.
 
-Python 3.10+ empfohlen.
+Python 3.10+ recommended.
 """
 
 from __future__ import annotations
 
-import csv
 import datetime as dt
-import json
-import locale
 import os
-import tempfile
 import threading
 import time
 import tkinter as tk
 import urllib.error
-import urllib.parse
-import urllib.request
 import zoneinfo
-from collections import OrderedDict
 from tkinter import messagebox, ttk
 from typing import Any
 
 
 # ============================================================
-# KONFIGURATION
+# IMPORTE AUS deepseek_monitor (extraktierte Logik-Module)
 # ============================================================
 
-UTC = dt.timezone.utc
-APP_NAME = "DeepSeek Monitor"
-APP_VERSION = "2.4.0"
-
-# Tarifannahme aus der ursprünglichen Version
-PEAK_WINDOWS_UTC = (
-    (1 * 60, 4 * 60),   # 01:00–04:00 UTC
-    (6 * 60, 10 * 60),  # 06:00–10:00 UTC
+import deepseek_monitor.config as config
+from deepseek_monitor.config import (
+    ANALYTICS_DAYS,
+    ANALYTICS_INTERVAL_LIMIT,
+    APP_NAME,
+    APP_VERSION,
+    BALANCE_URL,
+    BJ_TZ,
+    COLOR_ACCENT,
+    COLOR_BG,
+    COLOR_CARD,
+    COLOR_CARD_BORDER,
+    COLOR_NEEDLE,
+    COLOR_PEAK,
+    COLOR_STANDARD,
+    COLOR_TEXT_DIM,
+    COLOR_TEXT_MAIN,
+    COLOR_TICK_MINOR,
+    COLOR_WARNING,
+    COLOR_WEEKEND,
+    DEFAULT_POLL_INTERVAL_S,
+    DEFAULT_TZ,
+    MAX_HISTORY,
+    MAX_POLL_INTERVAL_S,
+    MIN_POLL_INTERVAL_S,
+    PEAK_MULTIPLIER,
+    PEAK_WINDOWS_UTC,
+    POLL_INTERVAL_STEP_S,
+    POLL_INTERVAL_S,
+    PROXY_BASE_URL,
+    PROXY_USAGE_URL,
+    STATUS_COLORS,
+    UTC,
+    WARNING_BEFORE_S,
+    WEEKEND_RULE_START_UTC,
+    _apply_influx_config,
 )
-
-PEAK_MULTIPLIER = 2.0
-
-# Weekend off-peak rule:
-# entire Saturday + Sunday in Beijing time
-WEEKEND_RULE_START_UTC = dt.datetime(
-    2026, 8, 22, 16, 0, tzinfo=UTC
+from deepseek_monitor.i18n import (
+    BASE_TRANSLATIONS,
+    CURRENCY_SYMBOLS,
+    LANGUAGES,
+    LANGUAGE_ORDER,
+    TRANSLATIONS,
+    detect_language,
 )
-BJ_TZ = zoneinfo.ZoneInfo("Asia/Shanghai")
-
-DEFAULT_TZ = "Europe/Berlin"
-
-DEFAULT_POLL_INTERVAL_S = 20
-MIN_POLL_INTERVAL_S = 20
-MAX_POLL_INTERVAL_S = 3600
-POLL_INTERVAL_STEP_S = 10
-POLL_INTERVAL_S = DEFAULT_POLL_INTERVAL_S
-WARNING_BEFORE_S = 60
-ANALYTICS_DAYS = 14
-ANALYTICS_INTERVAL_LIMIT = 150
-
-BALANCE_URL = "https://api.deepseek.com/user/balance"
-
-# Proxy (deepseek-proxy/) liefert echte Token-Usage-Daten als Quelle für die
-# Detailseite „Kosten & Verbrauch" statt der Guthaben-Delta-Schätzung.
-PROXY_BASE_URL = os.environ.get(
-    "DEEPSEEK_PROXY_URL",
-    "http://127.0.0.1:8000",
-).rstrip("/")
-PROXY_USAGE_URL = f"{PROXY_BASE_URL}/api/usage"
-
-# Optionale zentrale InfluxDB 2.x als alternative Datenquelle (multi-host).
-# Diese Werte können zur Laufzeit über die GUI-Einstellungen geändert werden
-# (``_apply_influx_config``) und werden in ``influx_config`` persistiert.
-INFLUX_URL = ""
-INFLUX_TOKEN = ""
-INFLUX_ORG = ""
-INFLUX_BUCKET = ""
-INFLUX_ENABLED = False
-
-
-def _apply_influx_config(
-    url: str,
-    token: str,
-    org: str,
-    bucket: str,
-) -> None:
-    """Setzt die InfluxDB-Konfiguration zur Laufzeit (Modul-Globals)."""
-    global INFLUX_URL, INFLUX_TOKEN, INFLUX_ORG, INFLUX_BUCKET, INFLUX_ENABLED
-
-    INFLUX_URL = (url or "").strip().rstrip("/")
-    INFLUX_TOKEN = (token or "").strip()
-    INFLUX_ORG = (org or "").strip()
-    INFLUX_BUCKET = (bucket or "").strip()
-    INFLUX_ENABLED = bool(
-        INFLUX_URL and INFLUX_TOKEN and INFLUX_ORG and INFLUX_BUCKET
-    )
-
-
-MAX_HISTORY = 50_000
-MAX_ANALYTICS_GAP_S = POLL_INTERVAL_S * 2.5
-
-
-
-# ============================================================
-# SPRACHEN / WÄHRUNGEN
-# ============================================================
-
-LANGUAGES = {
-    "de": "Deutsch", "en": "English", "fr": "Français", "es": "Español",
-    "it": "Italiano", "pt": "Português", "nl": "Nederlands",
-    "pl": "Polski", "ru": "Русский", "zh": "中文",
-}
-LANGUAGE_ORDER = tuple(LANGUAGES)
-
-
-def detect_language() -> str:
-    values = [
-        os.environ.get("LC_ALL", ""),
-        os.environ.get("LC_MESSAGES", ""),
-        os.environ.get("LANG", ""),
-        os.environ.get("LANGUAGE", ""),
-    ]
-    try:
-        values.append(locale.getlocale()[0] or "")
-    except (ValueError, AttributeError):
-        pass
-    for value in values:
-        value = (value or "").lower()
-        for prefix in LANGUAGES:
-            if value.startswith(prefix):
-                return prefix
-    return "en"
-
-
-BASE_TRANSLATIONS = {
-    "de": {
-        "tariff":" Tarif ", "realtime":" Echtzeit ", "analytics":" Analytics ", "costs":"Kosten & Verbrauch",
-        "tz":"TZ:", "weekend":"Wochenende:", "weekend_text":" Sa 00:00 – Mo 00:00 (Peking-Zeit)",
-        "peak":"Peak:", "standard":"Std:", "refresh":"Jetzt aktualisieren",
-        "api":"API", "api_key":"API-Key", "api_key_title":"DeepSeek API-Key",
-        "api_key_hint":"API-Key eingeben oder neu setzen:", "save":"Speichern",
-        "cancel":"Abbrechen", "remove":"Key entfernen",
-        "env_hint":"DEEPSEEK_API_KEY wird ebenfalls unterstützt.",
-        "connecting":"Verbinde mit DeepSeek API…", "error":"Fehler",
-        "available":"verfügbar", "unavailable":"nicht ausreichend",
-        "loaded":"Aufgeladen:", "granted":"Geschenkt:", "as_of":"Stand:",
-        "analytics_title":"Verbrauchsanalyse",
-        "analytics_hint":"Letzte 14 Tage. Verbrauch aus real aufgezeichneten Token-Usage-Daten des Proxys.",
-        "total":"Gesamt", "normal":"Normal", "savings":"Pot. Ersparnis",
-        "peak_share":"Peak-Anteil am Verbrauch:", "daily":"Tagesanalyse",
-        "intervals":"Letzte Requests", "date":"Datum",
-        "usage":"Gesamt", "weekend_short":"WE", "from":"Von", "to":"Bis",
-        "zone":"Zone", "amount":"Verbrauch", "note":"Hinweis",
-        "gap_note":"Schätzung bei größerer Messlücke",
-        "analytics_note":"Annahme: Peak = {mult:.1f}× Standard. Die potenzielle Ersparnis zeigt die vermeidbare Peak-Prämie. Verbrauch aus realen Token-Usage-Daten des Proxys.",
-        "no_data":"Noch keine Daten – die Auswertung baut sich mit jeder Abfrage auf.",
-        "proxy_error_hint":"Keine Proxy-Daten – läuft der Dienst deepseek-proxy?",
-        "no_key":"Kein API-Key hinterlegt.",
-        "confirm_remove":"Gespeicherten API-Key wirklich löschen?",
-        "no_key_error":"Kein API-Key: bitte über den API-Dialog setzen oder DEEPSEEK_API_KEY verwenden.",
-        "peak_status":"PEAK", "standard_status":"STANDARD", "weekend_status":"WOCHENENDE OFF-PEAK",
-        "zone_warning":"Tarifwechsel in ~{seconds} s → {status}",
-        "language":"Sprache", "timezone":"Zeitzone", "auto":"Auto", "settings_title":"Einstellungen", "appearance":"Darstellung", "data":"Daten", "actions":"Aktionen", "on_top":"Immer im Vordergrund",
-        "weekdays":["Mo","Di","Mi","Do","Fr","Sa","So"],
-        "api_401":"API-Key ungültig oder abgelaufen.",
-        "api_403":"Zugriff auf die DeepSeek API verweigert.",
-        "api_429":"Zu viele API-Anfragen – bitte später erneut versuchen.",
-        "poll_interval":"Balance-Abfrage", "poll_interval_hint":"Sekunden (mind. 20)", "apply":"Übernehmen", "saved":"Gespeichert ✓",
-        "data_source":"Datenquelle", "local_proxy":"Lokal (Proxy/SQLite)", "influxdb":"InfluxDB (zentral)",
-        "influx_url":"URL", "influx_token":"Token", "influx_org":"Organisation", "influx_bucket":"Bucket",
-        "host":"Host", "all_hosts":"Alle Hosts",
-    },
-    "en": {
-        "tariff":" Rate ", "realtime":" Realtime ", "analytics":" Analytics ", "costs":"Cost & Usage",
-        "tz":"TZ:", "weekend":"Weekend:", "weekend_text":" Sat 00:00 – Mon 00:00 (Beijing time)",
-        "peak":"Peak:", "standard":"Std:", "refresh":"Refresh now",
-        "api":"API", "api_key":"API key", "api_key_title":"DeepSeek API key",
-        "api_key_hint":"Enter or replace API key:", "save":"Save",
-        "cancel":"Cancel", "remove":"Remove key",
-        "env_hint":"DEEPSEEK_API_KEY is also supported.",
-        "connecting":"Connecting to DeepSeek API…", "error":"Error",
-        "available":"available", "unavailable":"insufficient",
-        "loaded":"Topped up:", "granted":"Granted:", "as_of":"As of:",
-        "analytics_title":"Usage analysis",
-        "analytics_hint":"Last 14 days. Usage from real recorded token usage data of the proxy.",
-        "total":"Total", "normal":"Normal", "savings":"Potential saving",
-        "peak_share":"Peak share of usage:", "daily":"Daily analysis",
-        "intervals":"Latest requests", "date":"Date",
-        "usage":"Total", "weekend_short":"WE", "from":"From", "to":"To",
-        "zone":"Zone", "amount":"Usage", "note":"Note",
-        "gap_note":"Estimate due to larger measurement gap",
-        "analytics_note":"Assumption: Peak = {mult:.1f}× Standard. Potential saving is the avoidable peak premium. Usage from real token usage data of the proxy.",
-        "no_data":"No data yet – the analysis builds with each poll.",
-        "proxy_error_hint":"No proxy data – is the deepseek-proxy service running?",
-        "no_key":"No API key configured.",
-        "confirm_remove":"Really delete the saved API key?",
-        "no_key_error":"No API key: set it in the API dialog or use DEEPSEEK_API_KEY.",
-        "peak_status":"PEAK", "standard_status":"STANDARD", "weekend_status":"WEEKEND OFF-PEAK",
-        "zone_warning":"Tariff change in ~{seconds} s → {status}",
-        "language":"Language", "timezone":"Timezone", "auto":"Automatic", "settings_title":"Settings", "appearance":"Appearance", "data":"Data", "actions":"Actions", "on_top":"Always on top",
-        "weekdays":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
-        "api_401":"API key invalid or expired.",
-        "api_403":"DeepSeek API access denied.",
-        "api_429":"Too many API requests – please try again later.",
-        "poll_interval":"Balance polling", "poll_interval_hint":"seconds (min. 20)", "apply":"Apply", "saved":"Saved ✓",
-        "data_source":"Data source", "local_proxy":"Local (proxy/SQLite)", "influxdb":"InfluxDB (central)",
-        "influx_url":"URL", "influx_token":"Token", "influx_org":"Organization", "influx_bucket":"Bucket",
-        "host":"Host", "all_hosts":"All hosts",
-    },
-}
-TRANSLATIONS = {code: dict(BASE_TRANSLATIONS["en"]) for code in LANGUAGES}
-TRANSLATIONS["de"].update(BASE_TRANSLATIONS["de"])
-TRANSLATIONS["de"]["costs"] = "Kosten & Verbrauch"
-TRANSLATIONS["en"]["costs"] = "Cost & Usage"
-TRANSLATIONS["fr"]["costs"] = "Coûts & usage"
-TRANSLATIONS["es"]["costs"] = "Costes y consumo"
-TRANSLATIONS["it"]["costs"] = "Costi e consumo"
-TRANSLATIONS["pt"]["costs"] = "Custos e consumo"
-TRANSLATIONS["nl"]["costs"] = "Kosten & verbruik"
-TRANSLATIONS["pl"]["costs"] = "Koszty i zużycie"
-TRANSLATIONS["ru"]["costs"] = "Расходы и потребление"
-TRANSLATIONS["zh"]["costs"] = "成本与用量"
-# Wochentage für die Realtime-Grafik
-for _lang, _days in {
-    "de": ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
-    "en": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-    "fr": ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"],
-    "es": ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"],
-    "it": ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"],
-    "pt": ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"],
-    "nl": ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"],
-    "pl": ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"],
-    "ru": ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
-    "zh": ["一", "二", "三", "四", "五", "六", "日"],
-}.items():
-    TRANSLATIONS[_lang]["weekdays"] = _days
-
-# Die wichtigsten sichtbaren UI-Begriffe werden für die weiteren Hauptsprachen lokalisiert.
-TRANSLATIONS["fr"].update({"costs":"Coûts & usage", "tariff":" Tarif ", "realtime":" Temps réel ", "analytics":" Analyse ", "refresh":"Actualiser", "api_key":"Clé API", "save":"Enregistrer", "cancel":"Annuler", "remove":"Supprimer", "language":"Langue"})
-TRANSLATIONS["es"].update({"costs":"Costes y consumo", "tariff":" Tarifa ", "realtime":" Tiempo real ", "analytics":" Análisis ", "refresh":"Actualizar", "api_key":"Clave API", "save":"Guardar", "cancel":"Cancelar", "remove":"Eliminar", "language":"Idioma"})
-TRANSLATIONS["it"].update({"costs":"Costi e consumo", "tariff":" Tariffa ", "realtime":" Realtime ", "analytics":" Analisi ", "refresh":"Aggiorna", "api_key":"Chiave API", "save":"Salva", "cancel":"Annulla", "remove":"Rimuovi", "language":"Lingua"})
-TRANSLATIONS["pt"].update({"costs":"Custos e consumo", "tariff":" Tarifa ", "realtime":" Tempo real ", "analytics":" Análise ", "refresh":"Atualizar", "api_key":"Chave API", "save":"Guardar", "cancel":"Cancelar", "remove":"Remover", "language":"Idioma"})
-TRANSLATIONS["nl"].update({"costs":"Kosten & verbruik", "tariff":" Tarief ", "realtime":" Realtime ", "analytics":" Analyse ", "refresh":"Vernieuwen", "api_key":"API-sleutel", "save":"Opslaan", "cancel":"Annuleren", "remove":"Verwijderen", "language":"Taal"})
-TRANSLATIONS["pl"].update({"costs":"Koszty i zużycie", "tariff":" Taryfa ", "realtime":" Na żywo ", "analytics":" Analiza ", "refresh":"Odśwież", "api_key":"Klucz API", "save":"Zapisz", "cancel":"Anuluj", "remove":"Usuń", "language":"Język"})
-TRANSLATIONS["ru"].update({"costs":"Расходы и потребление", "tariff":" Тариф ", "realtime":" Баланс ", "analytics":" Аналитика ", "refresh":"Обновить", "api_key":"API-ключ", "save":"Сохранить", "cancel":"Отмена", "remove":"Удалить", "language":"Язык"})
-TRANSLATIONS["zh"].update({"tariff":" 费率 ", "realtime":" 实时 ", "analytics":" 分析 ", "costs":"成本与用量", "refresh":"刷新", "api_key":"API 密钥", "save":"保存", "cancel":"取消", "remove":"删除", "language":"语言"})
-
-CURRENCY_SYMBOLS = {
-    "USD":"$", "CNY":"¥", "EUR":"€", "GBP":"£", "JPY":"¥",
-    "KRW":"₩", "CHF":"CHF ", "CAD":"C$", "AUD":"A$", "PLN":"zł ",
-}
-
-# ============================================================
-# FARBEN
-# ============================================================
-
-COLOR_BG = "#121212"
-COLOR_CARD = "#1a1a1a"
-COLOR_CARD_BORDER = "#2d2d2d"
-
-COLOR_STANDARD = "#2e7d32"
-COLOR_PEAK = "#c62828"
-COLOR_WEEKEND = "#f57c00"
-
-COLOR_TEXT_MAIN = "#ffffff"
-COLOR_TEXT_DIM = "#78909c"
-COLOR_TICK_MINOR = "#404040"
-COLOR_ACCENT = "#64b5f6"
-COLOR_NEEDLE = "#ffffff"
-
-COLOR_WARNING = "#ffb300"
-
-
-STATUS_COLORS = {
-    "STANDARD": COLOR_STANDARD,
-    "PEAK": COLOR_PEAK,
-    "WEEKEND": COLOR_WEEKEND,
-}
-
-
-# ============================================================
-# XDG / DATEIEN
-# ============================================================
-
-def _xdg_base(env_var: str, default_path: str) -> str:
-    value = os.environ.get(env_var, "").strip()
-    return value if value else os.path.expanduser(default_path)
-
-
-def _ensure_dir(path: str) -> str:
-    os.makedirs(path, exist_ok=True)
-    return path
-
-
-CONFIG_DIR = _ensure_dir(
-    os.path.join(_xdg_base("XDG_CONFIG_HOME", "~/.config"), "deepseek")
+from deepseek_monitor.paths import (
+    API_KEY_FILE,
+    AVAILABLE_TIMEZONES,
+    COMMON_TIMEZONES,
+    CONFIG_DIR,
+    CONFIG_FILE,
+    DAILY_CSV_FILE,
+    DATA_DIR,
+    HISTORY_FILE,
+    INFLUX_CONFIG_FILE,
+    LANGUAGE_FILE,
+    LEGACY_FILES,
+    POLL_INTERVAL_FILE,
+    POS_FILE,
+    STATE_DIR,
+    _ensure_dir,
+    _migrate_legacy_files,
+    _xdg_base,
 )
-STATE_DIR = _ensure_dir(
-    os.path.join(_xdg_base("XDG_STATE_HOME", "~/.local/state"), "deepseek")
+from deepseek_monitor.persistence import (
+    _init_influx_config,
+    load_api_key,
+    load_history,
+    load_influx_config,
+    load_language,
+    load_poll_interval,
+    load_timezone,
+    remove_influx_config,
+    remove_language,
+    remove_saved_api_key,
+    save_api_key,
+    save_history,
+    save_influx_config,
+    save_language,
+    save_poll_interval,
+    save_timezone,
+    write_daily_csv,
 )
-DATA_DIR = _ensure_dir(
-    os.path.join(_xdg_base("XDG_DATA_HOME", "~/.local/share"), "deepseek")
+from deepseek_monitor.api import (
+    currency_symbol,
+    fetch_balance,
+    parse_balance,
 )
-
-POS_FILE = os.path.join(CONFIG_DIR, "tarif_pos")
-CONFIG_FILE = os.path.join(CONFIG_DIR, "tarif_config")
-API_KEY_FILE = os.path.join(CONFIG_DIR, "api_key")
-POLL_INTERVAL_FILE = os.path.join(CONFIG_DIR, "poll_interval")
-INFLUX_CONFIG_FILE = os.path.join(CONFIG_DIR, "influx_config")
-LANGUAGE_FILE = os.path.join(CONFIG_DIR, "language")
-
-HISTORY_FILE = os.path.join(STATE_DIR, "balance_history.json")
-DAILY_CSV_FILE = os.path.join(DATA_DIR, "daily_usage.csv")
-
-
-LEGACY_FILES = {
-    os.path.expanduser("~/.deepseek_tarif_pos"): POS_FILE,
-    os.path.expanduser("~/.deepseek_tarif_config"): CONFIG_FILE,
-    os.path.expanduser("~/.deepseek_balance_history.json"): HISTORY_FILE,
-    os.path.expanduser("~/.deepseek_daily_usage.csv"): DAILY_CSV_FILE,
-}
-
-
-def _migrate_legacy_files() -> None:
-    for src, dst in LEGACY_FILES.items():
-        if os.path.exists(dst) or not os.path.exists(src):
-            continue
-        try:
-            os.replace(src, dst)
-        except OSError:
-            pass
-
-
-_migrate_legacy_files()
-
-
-COMMON_TIMEZONES = [
-    # UTC
-    "UTC",
-    # Americas
-    "America/New_York",
-    "America/Chicago",
-    "America/Denver",
-    "America/Los_Angeles",
-    "America/Sao_Paulo",
-    "America/Argentina/Buenos_Aires",
-    # Europe
-    "Europe/London",
-    "Europe/Berlin",
-    "Europe/Paris",
-    "Europe/Madrid",
-    "Europe/Rome",
-    "Europe/Amsterdam",
-    "Europe/Stockholm",
-    "Europe/Warsaw",
-    "Europe/Istanbul",
-    "Europe/Moscow",
-    # Asia
-    "Asia/Dubai",
-    "Asia/Kolkata",
-    "Asia/Jakarta",
-    "Asia/Shanghai",
-    "Asia/Tokyo",
-    "Asia/Seoul",
-    "Asia/Singapore",
-    "Asia/Bangkok",
-    # Australia / Pacific
-    "Australia/Sydney",
-    "Australia/Melbourne",
-    "Australia/Perth",
-    "Pacific/Auckland",
-    "Pacific/Fiji",
-    # Africa
-    "Africa/Cairo",
-    "Africa/Johannesburg",
-    "Africa/Lagos",
-]
-
-AVAILABLE_TIMEZONES = zoneinfo.available_timezones()
-
-
-# ============================================================
-# PERSISTENZ
-# ============================================================
-
-def load_timezone() -> str:
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            tz_name = f.read().strip()
-        if tz_name in AVAILABLE_TIMEZONES:
-            return tz_name
-    except OSError:
-        pass
-    return DEFAULT_TZ
-
-
-def save_timezone(tz_name: str) -> None:
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            f.write(tz_name)
-    except OSError:
-        pass
-
-
-def load_language() -> str | None:
-    """Lädt die manuell gesetzte Sprache (oder ``None``, wenn nicht gesetzt).
-
-    Eine manuelle Auswahl hat Vorrang vor der automatischen System-Erkennung.
-    """
-    try:
-        with open(LANGUAGE_FILE, "r", encoding="utf-8") as f:
-            code = f.read().strip()
-        if code in LANGUAGES:
-            return code
-    except OSError:
-        pass
-    return None
-
-
-def save_language(code: str) -> None:
-    try:
-        with open(LANGUAGE_FILE, "w", encoding="utf-8") as f:
-            f.write(code)
-    except OSError:
-        pass
-
-
-def remove_language() -> None:
-    try:
-        os.remove(LANGUAGE_FILE)
-    except FileNotFoundError:
-        pass
-
-
-def load_api_key() -> str:
-    # Ein im Programm gespeicherter Key hat Vorrang; Environment bleibt Fallback.
-    try:
-        with open(API_KEY_FILE, "r", encoding="utf-8") as f:
-            key = f.read().strip()
-            if key:
-                return key
-    except OSError:
-        pass
-
-    return os.environ.get("DEEPSEEK_API_KEY", "").strip()
-
-
-def save_api_key(key: str) -> None:
-    key = key.strip()
-    if not key:
-        raise ValueError("API-Key darf nicht leer sein.")
-
-    with open(API_KEY_FILE, "w", encoding="utf-8") as f:
-        f.write(key + "\n")
-
-    try:
-        os.chmod(API_KEY_FILE, 0o600)
-    except OSError:
-        pass
-
-
-def remove_saved_api_key() -> None:
-    try:
-        os.remove(API_KEY_FILE)
-    except FileNotFoundError:
-        pass
-
-
-def load_poll_interval() -> int:
-    try:
-        with open(POLL_INTERVAL_FILE, "r", encoding="utf-8") as f:
-            value = int(f.read().strip())
-        return min(MAX_POLL_INTERVAL_S, max(MIN_POLL_INTERVAL_S, value))
-    except (OSError, ValueError):
-        return DEFAULT_POLL_INTERVAL_S
-
-
-def save_poll_interval(seconds: int) -> None:
-    seconds = min(MAX_POLL_INTERVAL_S, max(MIN_POLL_INTERVAL_S, int(seconds)))
-    try:
-        with open(POLL_INTERVAL_FILE, "w", encoding="utf-8") as f:
-            f.write(str(seconds) + "\n")
-    except OSError:
-        pass
-
-
-def load_influx_config() -> dict[str, str] | None:
-    """Lädt die persistierte InfluxDB-Konfiguration (oder ``None``).
-
-    Eine vorhandene Datei hat Vorrang vor den Env-Variablen, weil sie explizit
-    über die GUI gesetzt wurde. Das Token wird nur lokal gespeichert (Datei
-    ``0600``), nie im Code.
-    """
-    try:
-        with open(INFLUX_CONFIG_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, dict):
-            return {
-                "url": str(data.get("url", "") or ""),
-                "token": str(data.get("token", "") or ""),
-                "org": str(data.get("org", "") or ""),
-                "bucket": str(data.get("bucket", "") or ""),
-            }
-    except (OSError, json.JSONDecodeError):
-        pass
-    return None
-
-
-def save_influx_config(cfg: dict[str, str]) -> None:
-    """Persistiert die InfluxDB-Konfiguration (Datei ``0600``)."""
-    try:
-        with open(INFLUX_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, ensure_ascii=False, separators=(",", ":"))
-        os.chmod(INFLUX_CONFIG_FILE, 0o600)
-    except OSError:
-        pass
-
-
-def remove_influx_config() -> None:
-    """Entfernt die persistierte InfluxDB-Konfiguration."""
-    try:
-        os.remove(INFLUX_CONFIG_FILE)
-    except FileNotFoundError:
-        pass
-
-
-def _init_influx_config() -> None:
-    """Initialisiert die Influx-Konfiguration: Datei > Env > deaktiviert."""
-    cfg = load_influx_config()
-    if cfg is not None:
-        _apply_influx_config(
-            cfg["url"],
-            cfg["token"],
-            cfg["org"],
-            cfg["bucket"],
-        )
-    else:
-        _apply_influx_config(
-            os.environ.get("DEEPSEEK_INFLUX_URL", ""),
-            os.environ.get("DEEPSEEK_INFLUX_TOKEN", ""),
-            os.environ.get("DEEPSEEK_INFLUX_ORG", ""),
-            os.environ.get("DEEPSEEK_INFLUX_BUCKET", ""),
-        )
-
-
-def load_history() -> list[dict[str, Any]]:
-    try:
-        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, list) else []
-    except (OSError, json.JSONDecodeError, TypeError):
-        return []
-
-
-def save_history(records: list[dict[str, Any]]) -> None:
-    """
-    Atomisches Schreiben, damit bei einem Programm-/Systemabsturz
-    nicht die komplette History-Datei beschädigt wird.
-    """
-    trimmed = records[-MAX_HISTORY:]
-
-    try:
-        directory = os.path.dirname(HISTORY_FILE) or "."
-        fd, tmp_name = tempfile.mkstemp(
-            prefix=".balance_history.",
-            dir=directory,
-            text=True,
-        )
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(
-                    trimmed,
-                    f,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                )
-                f.write("\n")
-            os.replace(tmp_name, HISTORY_FILE)
-        finally:
-            if os.path.exists(tmp_name):
-                try:
-                    os.remove(tmp_name)
-                except OSError:
-                    pass
-    except OSError:
-        pass
-
-
-def write_daily_csv(rows: list[dict[str, Any]]) -> None:
-    try:
-        with open(
-            DAILY_CSV_FILE,
-            "w",
-            newline="",
-            encoding="utf-8",
-        ) as f:
-            writer = csv.writer(f)
-            writer.writerow(
-                [
-                    "date",
-                    "consumption_total",
-                    "peak_consumption",
-                    "standard_consumption",
-                    "weekend_consumption",
-                    "avoidable_peak_cost",
-                ]
-            )
-            for row in rows:
-                writer.writerow(
-                    [
-                        row["date"],
-                        row["usage"],
-                        row["peak_usage"],
-                        row["standard_usage"],
-                        row["weekend_usage"],
-                        row["avoidable_savings"],
-                    ]
-                )
-    except OSError:
-        pass
-
-
-# Influx-Konfiguration beim Import initialisieren (Datei > Env > deaktiviert).
-_init_influx_config()
-
-
-# ============================================================
-# API
-# ============================================================
-
-def fetch_balance(api_key: str) -> dict[str, Any]:
-    request = urllib.request.Request(
-        BALANCE_URL,
-        headers={
-            "Accept": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        },
-        method="GET",
-    )
-
-    with urllib.request.urlopen(request, timeout=15) as response:
-        raw = response.read().decode("utf-8")
-        return json.loads(raw)
-
-
-def parse_balance(data: dict[str, Any]) -> dict[str, Any]:
-    def as_float(obj: dict[str, Any], field: str) -> float:
-        try:
-            return float(obj.get(field, 0))
-        except (TypeError, ValueError):
-            return 0.0
-
-    is_available = bool(data.get("is_available", True))
-
-    infos = data.get("balance_infos") or []
-    if infos and isinstance(infos[0], dict):
-        info = infos[0]
-        return {
-            "total": as_float(info, "total_balance"),
-            "topped": as_float(info, "topped_up_balance"),
-            "granted": as_float(info, "granted_balance"),
-            "available": is_available,
-            "currency": str(info.get("currency", "") or ""),
-        }
-
-    return {
-        "total": as_float(data, "total_balance"),
-        "topped": as_float(data, "topped_up_balance"),
-        "granted": as_float(data, "granted_balance"),
-        "available": is_available,
-        "currency": str(data.get("currency", "") or ""),
-    }
-
-
-def currency_symbol(currency: str) -> str:
-    return CURRENCY_SYMBOLS.get(
-        (currency or "").upper(),
-        currency or "",
-    )
-
-
-# ============================================================
-# TARIFLOGIK
-# ============================================================
-
-def status_at(now_utc: dt.datetime) -> str:
-    """
-    Liefert STANDARD, PEAK oder WEEKEND.
-    Der Status ist allein aus UTC-Zeit + Beijing-Wochenende ableitbar.
-    """
-    if now_utc.tzinfo is None:
-        now_utc = now_utc.replace(tzinfo=UTC)
-
-    bj_now = now_utc.astimezone(BJ_TZ)
-
-    if (
-        now_utc >= WEEKEND_RULE_START_UTC
-        and bj_now.weekday() >= 5
-    ):
-        return "WEEKEND"
-
-    current_minute = now_utc.hour * 60 + now_utc.minute
-
-    for start_minute, end_minute in PEAK_WINDOWS_UTC:
-        if start_minute <= current_minute < end_minute:
-            return "PEAK"
-
-    return "STANDARD"
-
-
-def _all_tariff_boundaries_around(
-    now_utc: dt.datetime,
-    days: int = 3,
-) -> list[dt.datetime]:
-    """
-    Erstellt mögliche Tarifgrenzen in einem kleinen Fenster.
-    Diese Liste ist klein und wird nicht sekündlich vollständig analysiert.
-    """
-    boundaries: set[dt.datetime] = set()
-
-    start_date = now_utc.date() - dt.timedelta(days=days)
-    end_date = now_utc.date() + dt.timedelta(days=days)
-
-    cursor = start_date
-    while cursor <= end_date:
-        for hour in (1, 4, 6, 10):
-            boundaries.add(
-                dt.datetime(
-                    cursor.year,
-                    cursor.month,
-                    cursor.day,
-                    hour,
-                    tzinfo=UTC,
-                )
-            )
-        cursor += dt.timedelta(days=1)
-
-    bj_date = now_utc.astimezone(BJ_TZ).date() - dt.timedelta(days=days)
-
-    while bj_date <= now_utc.astimezone(BJ_TZ).date() + dt.timedelta(days=days):
-        local_midnight = dt.datetime(
-            bj_date.year,
-            bj_date.month,
-            bj_date.day,
-            tzinfo=BJ_TZ,
-        )
-        boundaries.add(local_midnight.astimezone(UTC))
-        bj_date += dt.timedelta(days=1)
-
-    boundaries.add(WEEKEND_RULE_START_UTC)
-
-    return sorted(boundaries)
-
-
-def next_status_change(now_utc: dt.datetime) -> dt.datetime:
-    """
-    Sucht die nächste Grenze, an der sich der tatsächlich sichtbare Status
-    ändert. Dadurch gibt es am Wochenende keine falschen Warnungen an Peak-Kanten,
-    die durch WEEKEND ohnehin maskiert sind.
-    """
-    if now_utc.tzinfo is None:
-        now_utc = now_utc.replace(tzinfo=UTC)
-
-    before_delta = dt.timedelta(milliseconds=10)
-
-    for boundary in _all_tariff_boundaries_around(now_utc):
-        if boundary <= now_utc:
-            continue
-
-        before = status_at(boundary - before_delta)
-        after = status_at(boundary + before_delta)
-
-        if before != after:
-            return boundary
-
-    return now_utc + dt.timedelta(days=3)
-
-
-def get_rate_periods(
-    start_utc: dt.datetime,
-    end_utc: dt.datetime,
-) -> list[tuple[dt.datetime, dt.datetime, str]]:
-    """
-    Lückenlose Tarifperioden innerhalb [start_utc, end_utc].
-    Wird primär von Analytics benutzt, nicht vom 1-Sekunden-GUI-Loop.
-    """
-    if start_utc.tzinfo is None:
-        start_utc = start_utc.replace(tzinfo=UTC)
-    if end_utc.tzinfo is None:
-        end_utc = end_utc.replace(tzinfo=UTC)
-
-    if end_utc <= start_utc:
-        return []
-
-    boundaries = {
-        start_utc,
-        end_utc,
-    }
-
-    for boundary in _all_tariff_boundaries_around(start_utc, days=2):
-        if start_utc < boundary < end_utc:
-            boundaries.add(boundary)
-
-    points = sorted(boundaries)
-    periods: list[tuple[dt.datetime, dt.datetime, str]] = []
-
-    for a, b in zip(points, points[1:]):
-        if b <= a:
-            continue
-
-        mid = a + (b - a) / 2
-        periods.append((a, b, status_at(mid)))
-
-    if not periods:
-        return [(start_utc, end_utc, status_at(start_utc))]
-
-    merged: list[tuple[dt.datetime, dt.datetime, str]] = []
-    for a, b, status in periods:
-        if merged and merged[-1][2] == status:
-            merged[-1] = (merged[-1][0], b, status)
-        else:
-            merged.append((a, b, status))
-
-    return merged
-
-
-def weekend_segments_utc(
-    day_start_utc: dt.datetime,
-    day_end_utc: dt.datetime,
-) -> list[tuple[dt.datetime, dt.datetime]]:
-    return [
-        (a, b)
-        for a, b, status in get_rate_periods(
-            day_start_utc,
-            day_end_utc,
-        )
-        if status == "WEEKEND"
-    ]
-
-
-def calculate_status(
-    now_utc: dt.datetime,
-) -> tuple[str, float, str, str]:
-    key = status_at(now_utc)
-    next_change = next_status_change(now_utc)
-    seconds_left = max(
-        0.0,
-        (next_change - now_utc).total_seconds(),
-    )
-
-    text = (
-        "WOCHENENDE OFF-PEAK"
-        if key == "WEEKEND"
-        else key
-    )
-
-    return text, seconds_left, STATUS_COLORS[key], key
-
-
-# ============================================================
-# ANALYTICS
-# ============================================================
-
-def _parse_history(
-    records: list[dict[str, Any]],
-) -> list[tuple[dt.datetime, float, str]]:
-    parsed: list[tuple[dt.datetime, float, str]] = []
-
-    for record in records:
-        try:
-            timestamp = dt.datetime.fromisoformat(record["ts"])
-            if timestamp.tzinfo is None:
-                timestamp = timestamp.replace(tzinfo=UTC)
-
-            total = float(record.get("total", 0.0))
-            currency = str(record.get("currency", "") or "")
-
-            parsed.append(
-                (
-                    timestamp.astimezone(UTC),
-                    total,
-                    currency,
-                )
-            )
-        except (KeyError, TypeError, ValueError):
-            continue
-
-    parsed.sort(key=lambda item: item[0])
-    return parsed
-
-
-def _split_at_local_midnights(
-    start_utc: dt.datetime,
-    end_utc: dt.datetime,
-    tz: zoneinfo.ZoneInfo,
-) -> list[tuple[dt.datetime, dt.datetime]]:
-    """Teilt ein Intervall zusätzlich an lokalen Mitternächten."""
-    if end_utc <= start_utc:
-        return []
-
-    boundaries = {start_utc, end_utc}
-
-    local_start = start_utc.astimezone(tz).date() - dt.timedelta(days=1)
-    local_end = end_utc.astimezone(tz).date() + dt.timedelta(days=1)
-
-    cursor = local_start
-    while cursor <= local_end:
-        local_midnight = dt.datetime(
-            cursor.year,
-            cursor.month,
-            cursor.day,
-            tzinfo=tz,
-        )
-        boundary_utc = local_midnight.astimezone(UTC)
-
-        if start_utc < boundary_utc < end_utc:
-            boundaries.add(boundary_utc)
-
-        cursor += dt.timedelta(days=1)
-
-    points = sorted(boundaries)
-    return list(zip(points, points[1:]))
-
-
-def analyze_history(
-    records: list[dict[str, Any]],
-    tz_name: str,
-    days: int = ANALYTICS_DAYS,
-    max_gap_s: float | None = None,
-) -> dict[str, Any]:
-    """
-    Analysiert Verbrauch als Balance-Verlust.
-
-    Annahme:
-    Ein Verbrauch zwischen zwei Messungen wird zeitanteilig auf die
-    Tarifintervalle zwischen den Messpunkten verteilt.
-    """
-    tz = zoneinfo.ZoneInfo(tz_name)
-    max_gap_s = float(max_gap_s) if max_gap_s is not None else MAX_ANALYTICS_GAP_S
-    now_utc = dt.datetime.now(UTC)
-    start_utc = now_utc - dt.timedelta(days=days)
-
-    parsed = _parse_history(records)
-
-    daily: OrderedDict[str, dict[str, float]] = OrderedDict()
-    intervals: list[dict[str, Any]] = []
-
-    total_usage = 0.0
-    peak_usage = 0.0
-    standard_usage = 0.0
-    weekend_usage = 0.0
-
-    currency = ""
-
-    for prev, curr in zip(parsed, parsed[1:]):
-        prev_ts, prev_total, prev_currency = prev
-        curr_ts, curr_total, curr_currency = curr
-
-        if curr_currency:
-            currency = curr_currency
-
-        if curr_ts <= prev_ts:
-            continue
-
-        raw_usage = prev_total - curr_total
-
-        # Aufladungen / positive Kontobewegungen nicht als Verbrauch werten.
-        if raw_usage <= 0:
-            continue
-
-        interval_start = max(prev_ts, start_utc)
-        interval_end = min(curr_ts, now_utc)
-
-        if interval_end <= interval_start:
-            continue
-
-        raw_duration_s = (
-            curr_ts - prev_ts
-        ).total_seconds()
-
-        clipped_duration_s = (
-            interval_end - interval_start
-        ).total_seconds()
-
-        if raw_duration_s <= 0:
-            continue
-
-        # Anteiliger Verbrauch nur für den sichtbaren Analytics-Zeitraum.
-        visible_usage = (
-            raw_usage
-            * clipped_duration_s
-            / raw_duration_s
-        )
-
-        if visible_usage <= 0:
-            continue
-
-        segments = get_rate_periods(
-            interval_start,
-            interval_end,
-        )
-
-        segment_total_s = sum(
-            (b - a).total_seconds()
-            for a, b, _ in segments
-        )
-
-        if segment_total_s <= 0:
-            continue
-
-        interval_rows: list[dict[str, Any]] = []
-
-        for seg_start, seg_end, status in segments:
-            for day_start, day_end in _split_at_local_midnights(
-                seg_start,
-                seg_end,
-                tz,
-            ):
-                duration_s = (
-                    day_end - day_start
-                ).total_seconds()
-
-                amount = (
-                    visible_usage
-                    * duration_s
-                    / segment_total_s
-                )
-
-                local_start = day_start.astimezone(tz)
-                local_end = day_end.astimezone(tz)
-
-                day_key = local_start.date().isoformat()
-
-                row = daily.setdefault(
-                    day_key,
-                    {
-                        "usage": 0.0,
-                        "peak_usage": 0.0,
-                        "standard_usage": 0.0,
-                        "weekend_usage": 0.0,
-                        "avoidable_savings": 0.0,
-                    },
-                )
-
-                row["usage"] += amount
-
-                if status == "PEAK":
-                    peak_usage += amount
-                    row["peak_usage"] += amount
-
-                    # Balanceverlust = tatsächliche Peak-Kosten.
-                    # Bei 2x wäre das vermeidbare Premium 50 % davon.
-                    savings = (
-                        amount
-                        * (1.0 - 1.0 / PEAK_MULTIPLIER)
-                        if PEAK_MULTIPLIER > 0
-                        else 0.0
-                    )
-
-                    row["avoidable_savings"] += savings
-                elif status == "WEEKEND":
-                    weekend_usage += amount
-                    row["weekend_usage"] += amount
-                else:
-                    standard_usage += amount
-                    row["standard_usage"] += amount
-
-                interval_rows.append(
-                {
-                    "start": local_start,
-                    "end": local_end,
-                    "status": status,
-                    "amount": amount,
-                }
-            )
-
-        gap = raw_duration_s > max_gap_s
-
-        # Für die Detailansicht nur echte sichtbare Verbrauchsintervalle.
-        if interval_rows:
-            intervals.append(
-                {
-                    "start": interval_rows[0]["start"],
-                    "end": interval_rows[-1]["end"],
-                    "duration_s": clipped_duration_s,
-                    "amount": visible_usage,
-                    "gap": gap,
-                    "parts": interval_rows,
-                }
-            )
-
-        total_usage += visible_usage
-
-    daily_rows: list[dict[str, Any]] = []
-
-    for date_key, row in daily.items():
-        daily_rows.append(
-            {
-                "date": date_key,
-                "usage": round(row["usage"], 6),
-                "peak_usage": round(row["peak_usage"], 6),
-                "standard_usage": round(row["standard_usage"], 6),
-                "weekend_usage": round(row["weekend_usage"], 6),
-                "avoidable_savings": round(
-                    row["avoidable_savings"],
-                    6,
-                ),
-            }
-        )
-
-    # Lückenlose Tagesreihe: Auch Tage ohne Verbrauch bekommen einen
-    # leeren Eintrag (usage = 0), damit sie in den Charts als leeres
-    # Fach mit Datum erscheinen.
-    rows_by_date = {
-        row["date"]: row
-        for row in daily_rows
-    }
-
-    local_today = now_utc.astimezone(tz).date()
-    daily_rows = []
-    for offset in range(days, -1, -1):
-        day_key = (
-            local_today
-            - dt.timedelta(days=offset)
-        ).isoformat()
-
-        row = rows_by_date.get(day_key)
-        if row is None:
-            row = {
-                "date": day_key,
-                "usage": 0.0,
-                "peak_usage": 0.0,
-                "standard_usage": 0.0,
-                "weekend_usage": 0.0,
-                "avoidable_savings": 0.0,
-            }
-        daily_rows.append(row)
-
-    avoidable_savings = (
-        peak_usage
-        * (1.0 - 1.0 / PEAK_MULTIPLIER)
-        if PEAK_MULTIPLIER > 0
-        else 0.0
-    )
-
-    peak_share = (
-        peak_usage / total_usage
-        if total_usage > 0
-        else 0.0
-    )
-
-    intervals.sort(
-        key=lambda item: item["end"],
-        reverse=True,
-    )
-
-    return {
-        "days": days,
-        "currency": currency,
-        "usage": round(total_usage, 6),
-        "peak_usage": round(peak_usage, 6),
-        "standard_usage": round(standard_usage, 6),
-        "weekend_usage": round(weekend_usage, 6),
-        "peak_share": peak_share,
-        "avoidable_savings": round(
-            avoidable_savings,
-            6,
-        ),
-        "daily": daily_rows,
-        "intervals": intervals[:ANALYTICS_INTERVAL_LIMIT],
-    }
-
-
-def fetch_proxy_usage(days: int = ANALYTICS_DAYS) -> list[dict[str, Any]]:
-    """Ruft die real aufgezeichneten Usage-Events des Proxys ab.
-
-    Der Proxy persistiert pro Request einen Usage-Eintrag und stellt ihn unter
-    ``GET /api/usage`` bereit. Der ``start``-Parameter wird in Europe/Berlin
-    formatiert, weil der Storage-Zeitstempelvergleich auf Berlin-ISO-Strings
-    läuft (gleiches Format wie die Datenbank).
-    """
-    berlin = zoneinfo.ZoneInfo("Europe/Berlin")
-    start = (
-        dt.datetime.now(berlin)
-        - dt.timedelta(days=max(0, int(days)))
-    ).isoformat(timespec="seconds")
-
-    url = f"{PROXY_USAGE_URL}?start={urllib.parse.quote(start)}"
-
-    request = urllib.request.Request(
-        url,
-        headers={"Accept": "application/json"},
-        method="GET",
-    )
-
-    with urllib.request.urlopen(request, timeout=10) as response:
-        raw = response.read().decode("utf-8")
-        data = json.loads(raw)
-
-    if not isinstance(data, list):
-        return []
-
-    return [item for item in data if isinstance(item, dict)]
-
-
-def _parse_flux_annotated_csv(raw: str) -> list[dict[str, str]]:
-    """Parst das annotated-CSV-Antwortformat der InfluxDB-2.x-Query-API.
-
-    Kommentarzeilen (``#``) werden übersprungen; die erste reguläre Zeile ist
-    der Header. Jede Datenzeile wird zu einem Dict ``Spalte -> Wert``.
-    """
-    rows: list[dict[str, str]] = []
-    header: list[str] | None = None
-
-    for line in raw.splitlines():
-        if not line:
-            continue
-        if line.startswith("#"):
-            continue
-        fields = next(csv.reader([line]))
-        if header is None:
-            header = fields
-            continue
-        if len(fields) != len(header):
-            continue
-        rows.append(dict(zip(header, fields)))
-
-    return rows
-
-
-def _flux_row_to_event(row: dict[str, str]) -> dict[str, Any] | None:
-    """Mappt eine pivotierte Flux-Zeile auf ein Event-Dict analog zu ``/api/usage``.
-
-    Das Format entspricht der Proxy-/api/usage-Struktur, damit
-    :func:`analyze_proxy_usage` unverändert weiterverwendet werden kann.
-    """
-    def as_int(key: str) -> int:
-        try:
-            return int(float(row.get(key) or 0.0))
-        except (TypeError, ValueError):
-            return 0
-
-    def as_float(key: str) -> float:
-        try:
-            return float(row.get(key) or 0.0)
-        except (TypeError, ValueError):
-            return 0.0
-
-    timestamp = row.get("_time", "")
-    if timestamp.endswith("Z"):
-        timestamp = timestamp[:-1] + "+00:00"
-
-    return {
-        "timestamp": timestamp,
-        "model": row.get("model", "") or "unknown",
-        "tariff": row.get("tariff", "") or "off_peak",
-        "fingerprint": row.get("fingerprint", "") or "",
-        "host": row.get("host", "") or "",
-        "input_tokens": as_int("input_tokens"),
-        "output_tokens": as_int("output_tokens"),
-        "cache_read_tokens": as_int("cache_read_tokens"),
-        "cache_creation_tokens": as_int("cache_creation_tokens"),
-        "total_tokens": as_int("total_tokens"),
-        "cost_usd": as_float("cost_usd"),
-    }
-
-
-def _influx_query(flux: str) -> list[dict[str, str]]:
-    """Führt eine Flux-Query gegen die InfluxDB-2.x-Query-API aus.
-
-    Liefert die geparsten annotated-CSV-Zeilen als Liste von Dicts.
-    """
-    url = f"{INFLUX_URL}/api/v2/query?org={urllib.parse.quote(INFLUX_ORG)}"
-
-    body = json.dumps(
-        {
-            "query": flux,
-            "dialect": {
-                "header": True,
-                "delimiter": ",",
-                "annotations": ["datatype"],
-            },
-        }
-    ).encode("utf-8")
-
-    request = urllib.request.Request(
-        url,
-        data=body,
-        headers={
-            "Accept": "application/csv",
-            "Content-Type": "application/json",
-            "Authorization": f"Token {INFLUX_TOKEN}",
-        },
-        method="POST",
-    )
-
-    with urllib.request.urlopen(request, timeout=15) as response:
-        raw = response.read().decode("utf-8")
-
-    return _parse_flux_annotated_csv(raw)
-
-
-def fetch_influx_usage(
-    days: int = ANALYTICS_DAYS,
-    host: str | None = None,
-) -> list[dict[str, Any]]:
-    """Liest die Usage-Events direkt aus der zentralen InfluxDB 2.x.
-
-    Nutzt die HTTP-Query-API (``POST /api/v2/query``) mit Flux und ``pivot``,
-    damit jede Event-Zeile als eine Zeile zurückkommt. Keine zusätzliche
-    Dependency -- reines ``urllib`` + stdlib-CSV-Parsing.
-
-    Parameter:
-        host: Optionaler Filter auf den ``host``-Tag (leer/None = alle Hosts).
-
-    Liefert eine leere Liste, wenn InfluxDB nicht konfiguriert ist
-    (``DEEPSEEK_INFLUX_*`` fehlt).
-    """
-    if not INFLUX_ENABLED:
-        return []
-
-    query = (
-        f'from(bucket: "{INFLUX_BUCKET}")'
-        f"  |> range(start: -{max(0, int(days))}d)"
-        '  |> filter(fn: (r) => r._measurement == "usage")'
-    )
-    if host:
-        query += f'\n  |> filter(fn: (r) => r.host == "{host}")'
-    query += '  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")'
-
-    rows = _influx_query(query)
-
-    events: list[dict[str, Any]] = []
-    for row in rows:
-        event = _flux_row_to_event(row)
-        if event:
-            events.append(event)
-
-    return events
-
-
-def fetch_influx_hosts() -> list[str]:
-    """Liefert alle bisher gesehenen ``host``-Tag-Werte aus InfluxDB."""
-    if not INFLUX_ENABLED:
-        return []
-
-    flux = (
-        'import "influxdata/influxdb/schema"'
-        f'\nschema.tagValues(bucket: "{INFLUX_BUCKET}", tag: "host")'
-    )
-
-    rows = _influx_query(flux)
-
-    hosts: list[str] = []
-    for row in rows:
-        value = (row.get("_value") or "").strip()
-        if value and value not in hosts:
-            hosts.append(value)
-
-    return sorted(hosts)
-
-
-def fetch_usage(
-    days: int = ANALYTICS_DAYS,
-    host: str | None = None,
-) -> list[dict[str, Any]]:
-    """Dispatcher: InfluxDB (falls konfiguriert) sonst lokaler Proxy ``/api/usage``."""
-    if INFLUX_ENABLED:
-        return fetch_influx_usage(days, host=host)
-    return fetch_proxy_usage(days)
-
-
-def analyze_proxy_usage(
-    events: list[dict[str, Any]],
-    tz_name: str,
-    days: int = ANALYTICS_DAYS,
-) -> dict[str, Any]:
-    """Aggregiert echte Usage-Events des Proxys zu derselben Struktur wie
-    :func:`analyze_history`, damit die bestehende Darstellung unverändert
-    weiterverwendet werden kann.
-
-    Im Gegensatz zur Guthaben-Delta-Schätzung wird hier pro Request die real
-    berechneten Kosten (``cost_usd``) herangezogen. Die Zone wird pro Event
-    über die vorhandene :func:`status_at` bestimmt (PEAK/STANDARD/WEEKEND).
-    """
-    tz = zoneinfo.ZoneInfo(tz_name)
-    now_utc = dt.datetime.now(UTC)
-    start_utc = now_utc - dt.timedelta(days=days)
-
-    daily: OrderedDict[str, dict[str, float]] = OrderedDict()
-    intervals: list[dict[str, Any]] = []
-
-    total_usage = 0.0
-    peak_usage = 0.0
-    standard_usage = 0.0
-    weekend_usage = 0.0
-
-    for event in events:
-        try:
-            timestamp = dt.datetime.fromisoformat(
-                str(event.get("timestamp") or "")
-            )
-            if timestamp.tzinfo is None:
-                timestamp = timestamp.replace(tzinfo=UTC)
-            ts_utc = timestamp.astimezone(UTC)
-        except (TypeError, ValueError):
-            continue
-
-        # Exakt im sichtbaren Fenster filtern (schützt vor DST-Unschärfe des
-        # reinen String-Vergleichs im Storage).
-        if not (start_utc <= ts_utc <= now_utc):
-            continue
-
-        try:
-            amount = float(event.get("cost_usd") or 0.0)
-        except (TypeError, ValueError):
-            amount = 0.0
-
-        if amount <= 0:
-            continue
-
-        status = status_at(ts_utc)
-        local = ts_utc.astimezone(tz)
-        day_key = local.date().isoformat()
-        host = str(event.get("host") or "").strip() or "unknown"
-
-        row = daily.setdefault(
-            day_key,
-            {
-                "usage": 0.0,
-                "peak_usage": 0.0,
-                "standard_usage": 0.0,
-                "weekend_usage": 0.0,
-                "avoidable_savings": 0.0,
-            },
-        )
-
-        row["usage"] += amount
-        row_zones = row.setdefault("_zone_hosts", {})
-        zone_hosts = row_zones.setdefault(status, {})
-        zone_hosts[host] = zone_hosts.get(host, 0.0) + amount
-
-        if status == "PEAK":
-            peak_usage += amount
-            row["peak_usage"] += amount
-            savings = (
-                amount * (1.0 - 1.0 / PEAK_MULTIPLIER)
-                if PEAK_MULTIPLIER > 0
-                else 0.0
-            )
-            row["avoidable_savings"] += savings
-        elif status == "WEEKEND":
-            weekend_usage += amount
-            row["weekend_usage"] += amount
-        else:
-            standard_usage += amount
-            row["standard_usage"] += amount
-
-        total_usage += amount
-
-        intervals.append(
-            {
-                "start": local,
-                "end": local,
-                "duration_s": 0.0,
-                "amount": amount,
-                "gap": False,
-                "parts": [
-                    {
-                        "start": local,
-                        "end": local,
-                        "status": status,
-                        "amount": amount,
-                    }
-                ],
-            }
-        )
-
-    daily_rows: list[dict[str, Any]] = []
-
-    for date_key, row in daily.items():
-        zone_hosts: dict[str, dict[str, float]] = {}
-        for zone, hosts in row.get("_zone_hosts", {}).items():
-            zone_hosts[zone] = {
-                h: round(a, 6)
-                for h, a in sorted(
-                    hosts.items(), key=lambda kv: kv[1], reverse=True
-                )
-            }
-        daily_rows.append(
-            {
-                "date": date_key,
-                "usage": round(row["usage"], 6),
-                "peak_usage": round(row["peak_usage"], 6),
-                "standard_usage": round(row["standard_usage"], 6),
-                "weekend_usage": round(row["weekend_usage"], 6),
-                "avoidable_savings": round(row["avoidable_savings"], 6),
-                "zone_hosts": zone_hosts,
-            }
-        )
-
-    rows_by_date = {row["date"]: row for row in daily_rows}
-
-    local_today = now_utc.astimezone(tz).date()
-    daily_rows = []
-    for offset in range(days, -1, -1):
-        day_key = (local_today - dt.timedelta(days=offset)).isoformat()
-        row = rows_by_date.get(day_key)
-        if row is None:
-            row = {
-                "date": day_key,
-                "usage": 0.0,
-                "peak_usage": 0.0,
-                "standard_usage": 0.0,
-                "weekend_usage": 0.0,
-                "avoidable_savings": 0.0,
-                "zone_hosts": {},
-            }
-        daily_rows.append(row)
-
-    avoidable_savings = (
-        peak_usage * (1.0 - 1.0 / PEAK_MULTIPLIER)
-        if PEAK_MULTIPLIER > 0
-        else 0.0
-    )
-
-    peak_share = (
-        peak_usage / total_usage
-        if total_usage > 0
-        else 0.0
-    )
-
-    intervals.sort(key=lambda item: item["end"], reverse=True)
-
-    return {
-        "days": days,
-        "currency": "USD",
-        "usage": round(total_usage, 6),
-        "peak_usage": round(peak_usage, 6),
-        "standard_usage": round(standard_usage, 6),
-        "weekend_usage": round(weekend_usage, 6),
-        "peak_share": peak_share,
-        "avoidable_savings": round(avoidable_savings, 6),
-        "daily": daily_rows,
-        "intervals": intervals[:ANALYTICS_INTERVAL_LIMIT],
-    }
-
-
-def _shade_hex(color: str, factor: float) -> str:
-    """Skaliert eine ``#RRGGBB``-Farbe um ``factor`` (1.0 = unverändert,
-    < 1.0 = dunkler, > 1.0 = heller). Ergebnis wird auf den gültigen
-    Bereich geklemmt und wieder als ``#RRGGBB`` zurückgegeben."""
-    color = color.lstrip("#")
-    if len(color) != 6:
-        return "#" + color
-    try:
-        r, g, b = (int(color[i:i + 2], 16) for i in (0, 2, 4))
-    except ValueError:
-        return "#" + color
-    r = max(0, min(255, int(r * factor)))
-    g = max(0, min(255, int(g * factor)))
-    b = max(0, min(255, int(b * factor)))
-    return f"#{r:02x}{g:02x}{b:02x}"
-
-
-def format_money(
-    value: float,
-    currency: str,
-    language: str = "en",
-    decimals: int = 4,
-) -> str:
-    symbol = currency_symbol(currency)
-
-    if language in {"de", "fr", "es", "it", "pt", "nl", "pl", "ru"}:
-        number = (
-            f"{value:,.{decimals}f}"
-            .replace(",", "X")
-            .replace(".", ",")
-            .replace("X", ".")
-        )
-    else:
-        number = f"{value:,.{decimals}f}"
-
-    return f"{symbol}{number}".strip() if symbol else number
-
-
+from deepseek_monitor.tariff import (
+    _all_tariff_boundaries_around,
+    calculate_status,
+    get_rate_periods,
+    next_status_change,
+    status_at,
+    weekend_segments_utc,
+)
+from deepseek_monitor.analytics import (
+    _flux_row_to_event,
+    _influx_query,
+    _parse_flux_annotated_csv,
+    _parse_history,
+    _shade_hex,
+    _split_at_local_midnights,
+    analyze_history,
+    analyze_proxy_usage,
+    fetch_influx_hosts,
+    fetch_influx_usage,
+    fetch_proxy_usage,
+    fetch_usage,
+    format_money,
+)
 # ============================================================
 # GUI
 # ============================================================
@@ -1712,7 +260,7 @@ class _LegacyDeepSeekFiligreeGUI:
         ).start()
 
     # --------------------------------------------------------
-    # Basis / Fenster
+    # Base / window
     # --------------------------------------------------------
 
     def _read_position_into_window(self) -> None:
@@ -1763,7 +311,7 @@ class _LegacyDeepSeekFiligreeGUI:
         self.root.destroy()
 
     # --------------------------------------------------------
-    # Tarif-Tab
+    # Tariff tab
     # --------------------------------------------------------
 
     def _build_tariff_tab(self) -> None:
@@ -1924,7 +472,7 @@ class _LegacyDeepSeekFiligreeGUI:
 
         self.lbl_peak_label = tk.Label(
             self.win_frame,
-            text="Peak:",
+            text=self.t("peak"),
             font=("Segoe UI", 7, "bold"),
             fg="#ef5350",
             bg=COLOR_BG,
@@ -1942,7 +490,7 @@ class _LegacyDeepSeekFiligreeGUI:
 
         self.lbl_std_label = tk.Label(
             self.win_frame,
-            text="Std:",
+            text=self.t("standard"),
             font=("Segoe UI", 7, "bold"),
             fg="#66bb6a",
             bg=COLOR_BG,
@@ -1969,7 +517,7 @@ class _LegacyDeepSeekFiligreeGUI:
 
         tk.Label(
             weekend_frame,
-            text="Wochenende:",
+            text=self.t("weekend"),
             font=("Segoe UI", 7, "bold"),
             fg=COLOR_WEEKEND,
             bg=COLOR_BG,
@@ -1977,7 +525,7 @@ class _LegacyDeepSeekFiligreeGUI:
 
         tk.Label(
             weekend_frame,
-            text=" Sa 00:00 – Mo 00:00 (Peking-Zeit)",
+            text=self.t("weekend_text"),
             font=("Segoe UI", 7),
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_BG,
@@ -1995,7 +543,7 @@ class _LegacyDeepSeekFiligreeGUI:
         )
 
     # --------------------------------------------------------
-    # Realtime-Tab
+    # Realtime tab
     # --------------------------------------------------------
 
     def _build_balance_tab(self) -> None:
@@ -2084,7 +632,7 @@ class _LegacyDeepSeekFiligreeGUI:
 
         tk.Label(
             tab,
-            text="Tagesauswertung (14 Tage)",
+            text=self.t("daily_title", days=ANALYTICS_DAYS),
             font=("Segoe UI", 8, "bold"),
             fg=COLOR_ACCENT,
             bg=COLOR_BG,
@@ -2126,8 +674,8 @@ class _LegacyDeepSeekFiligreeGUI:
 
         for legend_color, legend_label in (
             (COLOR_PEAK, "Peak"),
-            (COLOR_STANDARD, "Normal"),
-            (COLOR_WEEKEND, "Wochenende"),
+            (COLOR_STANDARD, self.t("normal")),
+            (COLOR_WEEKEND, self.t("weekend_label")),
         ):
             swatch = tk.Canvas(
                 legend,
@@ -2172,7 +720,7 @@ class _LegacyDeepSeekFiligreeGUI:
         )
 
     # --------------------------------------------------------
-    # Analytics-Tab
+    # Analytics tab
     # --------------------------------------------------------
 
     def _build_analytics_tab(self) -> None:
@@ -2218,11 +766,11 @@ class _LegacyDeepSeekFiligreeGUI:
         self.analytics_vars: dict[str, tk.StringVar] = {}
 
         cards = [
-            ("Gesamt", "total"),
+            (self.t("total"), "total"),
             ("Peak", "peak"),
-            ("Normal", "standard"),
-            ("Wochenende", "weekend"),
-            ("Pot. Ersparnis", "savings"),
+            (self.t("normal"), "standard"),
+            (self.t("weekend_label"), "weekend"),
+            (self.t("savings"), "savings"),
         ]
 
         for title_text, key in cards:
@@ -2300,12 +848,12 @@ class _LegacyDeepSeekFiligreeGUI:
         )
 
         headings = {
-            "date": "Datum",
-            "usage": "Gesamt",
+            "date": self.t("date"),
+            "usage": self.t("usage"),
             "peak": "Peak",
-            "standard": "Normal",
-            "weekend": "WE",
-            "saving": "Ersparnis",
+            "standard": self.t("normal"),
+            "weekend": self.t("weekend_short"),
+            "saving": self.t("saving"),
         }
 
         widths = {
@@ -2397,11 +945,11 @@ class _LegacyDeepSeekFiligreeGUI:
         )
 
         interval_headings = {
-            "from": "Von",
-            "to": "Bis",
-            "status": "Zone",
-            "amount": "Verbrauch",
-            "note": "Hinweis",
+            "from": self.t("from"),
+            "to": self.t("to"),
+            "status": self.t("zone"),
+            "amount": self.t("amount"),
+            "note": self.t("note"),
         }
 
         interval_widths = {
@@ -2515,7 +1063,7 @@ class _LegacyDeepSeekFiligreeGUI:
         )
 
     # --------------------------------------------------------
-    # Sprache / API-Key
+    # Language / API key
     # --------------------------------------------------------
 
     def t(self, key: str, **kwargs: Any) -> str:
@@ -2708,7 +1256,7 @@ class _LegacyDeepSeekFiligreeGUI:
         self._update_balance_ui()
 
     # --------------------------------------------------------
-    # Zeitzone
+    # Timezone
     # --------------------------------------------------------
 
     def _on_tz_select(self, tz_name: str) -> None:
@@ -2883,8 +1431,8 @@ class _LegacyDeepSeekFiligreeGUI:
 
             if not api_key:
                 self._set_balance_error(
-                    "Kein API-Key: DEEPSEEK_API_KEY setzen "
-                    "oder ~/.config/deepseek/api_key anlegen"
+                    "No API key: set DEEPSEEK_API_KEY "
+                    "or create ~/.config/deepseek/api_key"
                 )
                 return
 
@@ -2916,7 +1464,7 @@ class _LegacyDeepSeekFiligreeGUI:
                         "error": None,
                     }
 
-                # Persistenz bewusst außerhalb des Locks.
+                # Persistence deliberately outside the lock.
                 save_history(self._history)
 
                 self._refresh_analytics_state()
@@ -2934,31 +1482,31 @@ class _LegacyDeepSeekFiligreeGUI:
             except urllib.error.HTTPError as exc:
                 if exc.code == 401:
                     message = (
-                        "API-Key ungültig oder abgelaufen."
+                        "API key invalid or expired."
                     )
                 elif exc.code == 403:
                     message = (
-                        "Zugriff auf die DeepSeek API verweigert."
+                        "Access to the DeepSeek API denied."
                     )
                 elif exc.code == 429:
                     message = (
-                        "Zu viele API-Anfragen – bitte später erneut versuchen."
+                        "Too many API requests – please try again later."
                     )
                 else:
                     message = (
-                        f"DeepSeek API HTTP-Fehler {exc.code}"
+                        f"DeepSeek API HTTP error {exc.code}"
                     )
 
                 self._set_balance_error(message)
 
             except urllib.error.URLError as exc:
                 self._set_balance_error(
-                    f"Netzwerkfehler: {exc.reason}"
+                    f"Network error: {exc.reason}"
                 )
 
             except Exception as exc:
                 self._set_balance_error(
-                    f"API-Fehler: {exc}"
+                    f"API error: {exc}"
                 )
 
         finally:
@@ -2976,16 +1524,16 @@ class _LegacyDeepSeekFiligreeGUI:
             self._balance_version += 1
 
     # --------------------------------------------------------
-    # Analytics-State
+    # Analytics state
     # --------------------------------------------------------
 
     def _refresh_analytics_state(self) -> None:
-        """Lädt die echten Usage-Daten des Proxys (nicht-blockierend) und
-        aktualisiert daraus die Analytics-Struktur.
+        """Load the real proxy usage data (non-blocking) and update the
+        analytics structure from it.
 
-        Bei einem Fehler (Proxy nicht erreichbar, keine Daten) wird die
-        Analytics-Struktur geleert und ein Hinweis gesetzt -- es wird bewusst
-        NICHT auf die alte Guthaben-Delta-Schätzung zurückgefallen.
+        On error (proxy unreachable, no data) the analytics structure is
+        cleared and a hint is set -- it deliberately does NOT fall back to the
+        old balance-delta estimate.
         """
         threading.Thread(
             target=self._load_proxy_analytics,
@@ -3008,14 +1556,14 @@ class _LegacyDeepSeekFiligreeGUI:
                     ANALYTICS_DAYS,
                 )
             else:
-                source = "InfluxDB" if INFLUX_ENABLED else "Proxy"
-                error_message = f"Keine {source}-Daten"
+                source = "InfluxDB" if config.INFLUX_ENABLED else "Proxy"
+                error_message = f"No {source} data"
         except urllib.error.HTTPError as exc:
-            error_message = f"Datenquelle HTTP-Fehler {exc.code}"
+            error_message = f"Data source HTTP error {exc.code}"
         except urllib.error.URLError as exc:
-            error_message = f"Datenquelle nicht erreichbar ({exc.reason})"
+            error_message = f"Data source unreachable ({exc.reason})"
         except Exception as exc:
-            error_message = f"Datenquellen-Fehler: {exc}"
+            error_message = f"Data source error: {exc}"
 
         daily_rows = analytics.get("daily", []) if analytics else []
 
@@ -3047,9 +1595,9 @@ class _LegacyDeepSeekFiligreeGUI:
         if total is None:
             self.lbl_balance_status.config(
                 text=(
-                    "Fehler"
+                    "Error"
                     if error
-                    else "Verbinde mit DeepSeek API…"
+                    else "Connecting to DeepSeek API…"
                 ),
                 fg=COLOR_PEAK
                 if error
@@ -3118,7 +1666,7 @@ class _LegacyDeepSeekFiligreeGUI:
                     )
                 )
                 text = (
-                    "Stand: "
+                    self.t("as_of") + " "
                     f"{local_update.strftime('%d.%m.%Y %H:%M:%S')}"
                 )
 
@@ -3164,8 +1712,7 @@ class _LegacyDeepSeekFiligreeGUI:
                 width / 2,
                 height / 2,
                 text=(
-                    "Noch keine Daten – "
-                    "die Auswertung baut sich mit jeder Abfrage auf."
+                    self.t("no_data")
                 ),
                 fill=COLOR_TEXT_DIM,
                 font=("Segoe UI", 8),
@@ -3242,8 +1789,8 @@ class _LegacyDeepSeekFiligreeGUI:
             x_left = x_center - bar_w / 2
             x_right = x_center + bar_w / 2
 
-            # Gestapelte Segmente:
-            # unten Normal (grün), Mitte Wochenende (orange),
+            # Stacked segments:
+            # bottom normal (green), middle weekend (orange),
             # oben Peak (rot).
             segment_top = base_y
 
@@ -3349,7 +1896,7 @@ class _LegacyDeepSeekFiligreeGUI:
 
         self.lbl_peak_share.config(
             text=(
-                f"Peak-Anteil am Verbrauch: "
+                self.t("peak_share") + " "
                 f"{peak_share:.1f} %"
             )
         )
@@ -3413,7 +1960,7 @@ class _LegacyDeepSeekFiligreeGUI:
                 end = part["end"]
 
                 note = (
-                    "Schätzung bei größerer Messlücke"
+                    "Estimate due to larger measurement gap"
                     if interval.get("gap")
                     else ""
                 )
@@ -3454,7 +2001,7 @@ class _LegacyDeepSeekFiligreeGUI:
         )
 
     # --------------------------------------------------------
-    # Akustische Warnung
+    # Acoustic warning
     # --------------------------------------------------------
 
     def _check_zone_warning(
@@ -3475,8 +2022,8 @@ class _LegacyDeepSeekFiligreeGUI:
         ):
             self._warned_boundary = boundary
 
-            # Tkinter bell() ist plattformübergreifend die einfachste
-            # Lösung und nutzt das System-/Fensterglockensignal.
+            # Tkinter bell() is the simplest cross-platform
+            # solution and uses the system/window bell signal.
             try:
                 self.root.bell()
             except tk.TclError:
@@ -3490,9 +2037,15 @@ class _LegacyDeepSeekFiligreeGUI:
                 boundary + dt.timedelta(seconds=1)
             )
 
-            text = (
-                f"Tarifwechsel in ~{int(seconds_left)} s → "
-                f"{'WOCHENENDE OFF-PEAK' if new_status == 'WEEKEND' else new_status}"
+            localized_status = {
+                "PEAK": self.t("peak_status"),
+                "STANDARD": self.t("standard_status"),
+                "WEEKEND": self.t("weekend_status"),
+            }.get(new_status, new_status)
+            text = self.t(
+                "zone_warning",
+                seconds=int(seconds_left),
+                status=localized_status,
             )
 
             self.lbl_warning.config(
@@ -3505,7 +2058,7 @@ class _LegacyDeepSeekFiligreeGUI:
             )
 
     # --------------------------------------------------------
-    # Legende
+    # Legend
     # --------------------------------------------------------
 
     def _update_peak_legend(
@@ -3562,7 +2115,7 @@ class _LegacyDeepSeekFiligreeGUI:
         )
 
     # --------------------------------------------------------
-    # Haupt-Loop
+    # Main loop
     # --------------------------------------------------------
 
     def update_loop(self) -> None:
@@ -3587,8 +2140,8 @@ class _LegacyDeepSeekFiligreeGUI:
         localized_status = {
             "PEAK": self.t("peak_status"),
             "STANDARD": self.t("standard_status"),
-            "WOCHENENDE OFF-PEAK": self.t("weekend_status"),
-        }.get(status_text, status_text)
+            "WEEKEND": self.t("weekend_status"),
+        }.get(_status_key, status_text)
 
         self.lbl_badge.config(
             text=localized_status,
@@ -3613,7 +2166,7 @@ class _LegacyDeepSeekFiligreeGUI:
             local_now.minute,
         )
 
-        # Teures Canvas-Redraw nur bei Minute/Zeitzone/Tag-Wechsel.
+        # Expensive canvas redraw only on minute/timezone/day change.
         if timeline_key != self._timeline_minute_key:
             self._timeline_minute_key = timeline_key
             self.draw_filigree_timeline(
@@ -3646,15 +2199,15 @@ SETTINGS_POS_FILE = os.path.join(CONFIG_DIR, "settings_pos")
 
 class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
     """
-    Neue Oberfläche:
-      - Root = minimalistisches Tarif-Widget
-      - Kosten & Verbrauch = ein gemeinsames, frei skalierbares Toplevel-Fenster
-      - Tarif bleibt ein minimalistisches Hauptfenster
-      - Fensterpositionen/-größen separat gespeichert
-      - Tarif-Fenster kann optional always-on-top sein
+    New UI:
+      - Root = minimalist tariff widget
+      - Cost & Usage = a shared, freely resizable toplevel window
+      - Tariff stays a minimalist main window
+      - window positions/sizes stored separately
+      - the tariff window can optionally be always-on-top
 
-    Die vorhandene Tarif-, Balance- und Analytics-Logik aus der Legacy-Klasse
-    wird wiederverwendet; nur die GUI-Schicht ist neu organisiert.
+    The existing tariff, balance and analytics logic from the legacy class is
+    reused; only the GUI layer is reorganized.
     """
 
     def __init__(self, root: tk.Tk):
@@ -3713,21 +2266,18 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
     # --------------------------------------------------------
 
     def _set_app_icon(self) -> None:
-        """Setzt das DeepSeek-Logo als Fenster-/Taskleisten-Icon."""
+        """Set the app icon for the window/taskbar."""
         try:
             base_dir = os.path.dirname(os.path.abspath(__file__))
-            png_path = os.path.join(base_dir, "deepseek_logo.png")
-            ico_path = os.path.join(base_dir, "deepseek_logo.ico")
-
-            if os.path.exists(png_path):
-                self._icon_image = tk.PhotoImage(file=png_path)
-                self.root.iconphoto(True, self._icon_image)
-
-            if os.name == "nt" and os.path.exists(ico_path):
-                try:
-                    self.root.iconbitmap(ico_path)
-                except tk.TclError:
-                    pass
+            candidates = (
+                os.path.join(base_dir, "assets", "deepseek-monitor-256.png"),
+                os.path.join(base_dir, "deepseek_logo.png"),
+            )
+            for png_path in candidates:
+                if os.path.exists(png_path):
+                    self._icon_image = tk.PhotoImage(file=png_path)
+                    self.root.iconphoto(True, self._icon_image)
+                    break
         except (OSError, tk.TclError):
             pass
 
@@ -3772,16 +2322,16 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
             pass
 
     def _load_window_position(self, path: str) -> tuple[int, int] | None:
-        """Lädt nur X/Y aus settings_pos; Breite/Höhe werden ignoriert."""
+        """Load only X/Y from settings_pos; width/height are ignored."""
         try:
             with open(path, "r", encoding="utf-8") as f:
                 value = f.read().strip()
             if "+" in value:
-                # Alte Form: 320x265+X+Y -> nur X/Y übernehmen.
+                # Old form: 320x265+X+Y -> only take X/Y.
                 _, x, y = value.rsplit("+", 2)
                 return int(x), int(y)
             if "," in value:
-                # Neue Form: X,Y
+                # New form: X,Y
                 x, y = value.split(",", 1)
                 return int(x), int(y)
         except (OSError, ValueError):
@@ -3789,7 +2339,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         return None
 
     def _save_window_position(self, window: tk.Toplevel | tk.Tk, path: str) -> None:
-        """Speichert bei positionsgebundenen Fenstern ausschließlich X/Y."""
+        """Save only X/Y for position-bound windows."""
         try:
             geometry = window.geometry()
             if "+" not in geometry:
@@ -3811,7 +2361,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
             pass
 
     # --------------------------------------------------------
-    # Mini-Tarif-Fenster
+    # Mini tariff window
     # --------------------------------------------------------
 
     def _build_mini_tariff(self) -> None:
@@ -3931,7 +2481,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         bar_y0 = 8
         bar_y1 = 16
 
-        # Farbband für jede lokale Stunde.
+        # Color band for each local hour.
         for hour in range(24):
             local_time = dt.datetime(
                 day.year, day.month, day.day, hour,
@@ -3945,8 +2495,8 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
                 fill=STATUS_COLORS[status], outline="",
             )
 
-        # Uhrzeit-Strahlen: jede Stunde ein Tick; alle 6 Stunden länger.
-        # Die sichtbaren Beschriftungen bleiben kompakt und stehen direkt darunter.
+        # Time rays: one tick per hour; longer every 6 hours.
+        # The visible labels stay compact and sit directly below.
         for hour in range(25):
             x = left + hour / 24 * usable
 
@@ -3977,7 +2527,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
                     font=("Segoe UI", 6),
                 )
 
-        # Aktueller Zeitpunkt: dezentes kleines gelbes Dreieck.
+        # Current point in time: subtle small yellow triangle.
         local_minutes = local_now.hour * 60 + local_now.minute
         needle_x = left + local_minutes / (24 * 60) * usable
         marker_y = 3
@@ -3991,7 +2541,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         )
 
     # --------------------------------------------------------
-    # Fenster-Toggle
+    # Window toggle
     # --------------------------------------------------------
 
     def _sync_window_buttons(self) -> None:
@@ -4003,7 +2553,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         )
 
     # --------------------------------------------------------
-    # Kosten & Verbrauch
+    # Cost & Usage
     # --------------------------------------------------------
 
     def open_cost_window(self) -> None:
@@ -4022,8 +2572,8 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         header = tk.Frame(win, bg=COLOR_BG)
         header.pack(fill=tk.X, padx=15, pady=(12, 0))
 
-        # Host-Filter (nur bei aktivem InfluxDB-Modus sinnvoll).
-        if INFLUX_ENABLED:
+        # Host filter (only useful in active InfluxDB mode).
+        if config.INFLUX_ENABLED:
             host_lbl = tk.Label(
                 header, text=self.t("host") + ":",
                 font=("Segoe UI", 8),
@@ -4086,11 +2636,11 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
 
         vars_: dict[str, tk.StringVar] = {}
         for title_text, key in (
-            ("Gesamt", "total"),
+            (self.t("total"), "total"),
             ("Peak", "peak"),
-            ("Normal", "standard"),
-            ("Wochenende", "weekend"),
-            ("Pot. Ersparnis", "savings"),
+            (self.t("normal"), "standard"),
+            (self.t("weekend_label"), "weekend"),
+            (self.t("savings"), "savings"),
         ):
             card = tk.Frame(
                 summary, bg=COLOR_CARD,
@@ -4129,15 +2679,15 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         chart.pack(fill=tk.BOTH, expand=True, padx=15, pady=(0, 5))
         chart.bind("<Configure>", lambda _e: self._draw_stacked_daily_chart(chart, analytics=True))
 
-        # Kompakte Legende unter dem Graphen (minimale Höhe, zentriert).
+        # Compact legend below the graph (minimal height, centered).
         legend = tk.Frame(win, bg=COLOR_BG)
         legend.pack(fill=tk.X, padx=15, pady=(0, 1))
         legend_inner = tk.Frame(legend, bg=COLOR_BG)
         legend_inner.pack(anchor=tk.CENTER)
         for legend_color, legend_label in (
             (COLOR_PEAK, "Peak"),
-            (COLOR_STANDARD, "Normal"),
-            (COLOR_WEEKEND, "Wochenende"),
+            (COLOR_STANDARD, self.t("normal")),
+            (COLOR_WEEKEND, self.t("weekend_label")),
         ):
             swatch = tk.Canvas(
                 legend_inner, width=10, height=10,
@@ -4177,9 +2727,9 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
             show="headings", height=8,
         )
         for column, label, width in (
-            ("from", "Von", 145), ("to", "Bis", 145),
-            ("status", "Zone", 110), ("amount", "Verbrauch", 110),
-            ("note", "Hinweis", 240),
+            ("from", self.t("from"), 145), ("to", self.t("to"), 145),
+            ("status", self.t("zone"), 110), ("amount", self.t("amount"), 110),
+            ("note", self.t("note"), 240),
         ):
             tree.heading(column, text=label)
             tree.column(column, width=width, anchor=tk.E if column == "amount" else tk.W)
@@ -4216,9 +2766,9 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=(0, 8))
 
     def _populate_host_filter(self) -> None:
-        """Befüllt das Host-Filter-Dropdown (nur bei aktivem InfluxDB-Modus)."""
+        """Populate the host filter dropdown (only in active InfluxDB mode)."""
         combo = getattr(self, "_host_combo", None)
-        if combo is None or not INFLUX_ENABLED:
+        if combo is None or not config.INFLUX_ENABLED:
             return
 
         try:
@@ -4232,7 +2782,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         combo.set(current)
 
     def _on_host_filter_selected(self, _event: object | None = None) -> None:
-        """Reagiert auf die Host-Auswahl und lädt die Daten neu."""
+        """React to the host selection and reload the data."""
         combo = getattr(self, "_host_combo", None)
         if combo is None:
             return
@@ -4243,7 +2793,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         else:
             self._host_filter = value
 
-        # Daten mit neuem Filter neu laden.
+        # Reload data with new filter.
         self._refresh_analytics_state()
 
     def _close_cost_window(self) -> None:
@@ -4280,12 +2830,11 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         self._poll_interval_s = seconds
         save_poll_interval(seconds)
 
-        # Analytics-Gap-Erkennung ebenfalls sofort anpassen.
-        global MAX_ANALYTICS_GAP_S
-        MAX_ANALYTICS_GAP_S = seconds * 2.5
+        # Also adjust analytics gap detection immediately.
+        config.MAX_ANALYTICS_GAP_S = seconds * 2.5
         self._refresh_analytics_state()
 
-        # Ein laufendes Warten sofort auf das neue Intervall umstellen.
+        # Immediately switch an ongoing wait to the new interval.
         self._poll_wakeup_event.set()
 
         if settings_window is not None:
@@ -4324,8 +2873,8 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         win.resizable(False, False)
         win.transient(self.root)
 
-        # Breite des Einstellungsfensters immer exakt wie das Hauptfenster.
-        # settings_pos speichert ausschließlich die Position, niemals die Größe.
+        # Settings window width always exactly like the main window.
+        # settings_pos stores only the position, never the size.
         saved_pos = self._load_window_position(SETTINGS_POS_FILE)
         if saved_pos is not None:
             win.geometry(f"300x230+{saved_pos[0]}+{saved_pos[1]}")
@@ -4348,9 +2897,9 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
                 self._settings_window = None
 
         win.protocol("WM_DELETE_WINDOW", close_settings)
-        # Position wird beim tatsächlichen Schließen gespeichert; kein Configure-Write nötig.
+        # Position is saved on actual close; no Configure write needed.
 
-        # Kopfbereich
+        # Header area
         header = tk.Frame(
             win,
             bg=COLOR_CARD,
@@ -4386,7 +2935,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
             bg=COLOR_CARD,
         ).pack(anchor="w")
 
-        # Gemeinsamer Stil für Eingabefelder/Buttons
+        # Shared style for input fields/buttons
         def section(parent: tk.Misc, caption: str) -> tk.Frame:
             outer = tk.Frame(
                 parent,
@@ -4406,7 +2955,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
 
         appearance = section(win, self.t("appearance"))
 
-        # Einheitliches 2-Spalten-Layout: Bezeichnung links, Auswahlfeld rechts.
+        # Uniform 2-column layout: label left, selection field right.
         # Fixed widths prevent the timezone button from shifting the language row.
         appearance_grid = tk.Frame(appearance, bg=COLOR_BG)
         appearance_grid.pack(fill=tk.X, padx=10, pady=(0, 8))
@@ -4543,7 +3092,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
             bg=COLOR_BG,
         ).pack(side=tk.RIGHT, padx=(0, 6))
 
-        # ---- Datenquelle (Lokal/Proxy vs. InfluxDB) ----
+        # ---- Data source (local/proxy vs. InfluxDB) ----
         source = section(win, self.t("data_source"))
 
         source_row = tk.Frame(source, bg=COLOR_BG)
@@ -4558,7 +3107,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         ).pack(side=tk.LEFT)
 
         source_var = tk.StringVar(
-            value=self.t("influxdb") if INFLUX_ENABLED else self.t("local_proxy")
+            value=self.t("influxdb") if config.INFLUX_ENABLED else self.t("local_proxy")
         )
         source_combo = ttk.Combobox(
             source_row,
@@ -4600,13 +3149,13 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         org_entry = field_row(2, self.t("influx_org"))
         bucket_entry = field_row(3, self.t("influx_bucket"))
 
-        # Token mit verdeckter Anzeige.
+        # Token with hidden display.
         token_entry.config(show="•")
 
-        url_entry.insert(0, INFLUX_URL)
-        token_entry.insert(0, INFLUX_TOKEN)
-        org_entry.insert(0, INFLUX_ORG)
-        bucket_entry.insert(0, INFLUX_BUCKET)
+        url_entry.insert(0, config.INFLUX_URL)
+        token_entry.insert(0, config.INFLUX_TOKEN)
+        org_entry.insert(0, config.INFLUX_ORG)
+        bucket_entry.insert(0, config.INFLUX_BUCKET)
 
         def _save_influx_settings() -> None:
             chosen = source_var.get()
@@ -4628,7 +3177,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
                 remove_influx_config()
                 _apply_influx_config("", "", "", "")
 
-            # Daten mit neuer Quelle neu laden.
+            # Reload data with new source.
             self._refresh_analytics_state()
             if self._cost_window is not None:
                 self._cost_rendered_version = -1
@@ -4747,7 +3296,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         window.destroy()
 
     def _open_api_then_close(self, window: tk.Toplevel) -> None:
-        # Rückwärtskompatibler Helfer: Geometrie sichern und Referenz bereinigen.
+        # Backward-compatible helper: save geometry and clean up reference.
         if window is getattr(self, "_settings_window", None):
             self._on_settings_close()
         else:
@@ -4799,8 +3348,8 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
 
     def _update_cost_window(self, force: bool = False) -> None:
         """
-        Aktualisiert das große Kostenfenster nur bei Datenänderungen.
-        Der 1-Sekunden-Tarifloop bleibt dadurch leichtgewichtig.
+        Update the large cost window only on data changes.
+        This keeps the 1-second tariff loop lightweight.
         """
         if self._cost_window is None:
             return
@@ -4893,11 +3442,11 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         self._draw_stacked_daily_chart(ui["canvas"], analytics=True)
 
     def _show_saved_dialog(self, parent: tk.Misc | None = None) -> None:
-        """Zeigt einen themen-konsistenten Bestätigungsdialog („Gespeichert").
+        """Show a theme-consistent confirmation dialog ("Saved").
 
-        Ersetzt ``messagebox.showinfo``, dessen Standard-Optik (hell/grau) nicht
-        zum dunklen Farbthema passt. Der Dialog ist modal über ``parent`` und
-        wird über den OK-Button oder ``Escape`` geschlossen.
+        Replaces ``messagebox.showinfo``, whose default look (light/gray) does
+        not match the dark color theme. The dialog is modal over ``parent`` and
+        is closed via the OK button or ``Escape``.
         """
         owner = parent if parent is not None else self.root
         dlg = tk.Toplevel(owner)
@@ -5025,8 +3574,8 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         width = max(canvas.winfo_width(), 500)
         height = max(canvas.winfo_height(), 160)
         data = rows[-ANALYTICS_DAYS:]
-        # ``top`` reserviert eine eigene Kopfzeile für den Prozent-/Farbhinweis,
-        # damit sich dieser nicht mit den Wertlabels der Balken überlagert.
+        # ``top`` reserves its own header line for the percentage/color hint,
+        # so it does not overlap the value labels of the bars.
         left, right, top, bottom = 30, 15, 36, 48
         plot_w = width - left - right
         plot_h = height - top - bottom
@@ -5037,10 +3586,10 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
 
         canvas.create_line(left, base_y, width-right, base_y, fill=COLOR_CARD_BORDER)
 
-        # Zone×Host-Modus: Jedes Segment gehört zu einer Tarifzone (Farbe) und
+        # Zone×Host mode: each segment belongs to a tariff zone (color) and
         # einem Host (Abdunkelung). Grundfarbe = Tarif-Farbe; jeder weitere
-        # Host dunkelt seine Grundfarbe um 5 % ab (Index über alle Hosts).
-        # Stapelreihenfolge: STANDARD (unten) → WEEKEND → PEAK (oben).
+        # host darkens its base color by 5% (index across all hosts).
+        # Stack order: STANDARD (bottom) → WEEKEND → PEAK (top).
         zone_colors = STATUS_COLORS
         zone_order = ("STANDARD", "WEEKEND", "PEAK")
 
@@ -5079,7 +3628,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
                     (float(row["peak_usage"]), COLOR_PEAK, None, "PEAK"),
                 ]
 
-            # Tooltip: Host-Anteile des Tages (einmal pro Balken berechnet).
+            # Tooltip: host shares of the day (computed once per bar).
             tooltip_text: str | None = None
             if has_segments:
                 day_hosts = {
@@ -5125,7 +3674,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
             weekdays = self.t("weekdays")
             weekday_label = weekdays[day.weekday()] if isinstance(weekdays, list) else day.strftime("%a")
 
-            # Zweizeilige Datumsachse: Wochentag direkt über dem Datum.
+            # Two-line date axis: weekday directly above the date.
             canvas.create_text(
                 x, base_y + 9,
                 text=weekday_label,
@@ -5145,7 +3694,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
                     fill=COLOR_TEXT_MAIN, font=("Segoe UI", 6),
                 )
 
-        # Prozent-/Farbhinweis oben rechts im großen Analytics-Fenster.
+        # Percentage/color hint at top right of the large analytics window.
         if analytics and self._analytics_ui:
             total = self._analytics.get("usage", 0.0)
             peak = self._analytics.get("peak_usage", 0.0)
@@ -5212,8 +3761,8 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         localized_status = {
             "PEAK": self.t("peak_status"),
             "STANDARD": self.t("standard_status"),
-            "WOCHENENDE OFF-PEAK": self.t("weekend_status"),
-        }.get(status_text, status_text)
+            "WEEKEND": self.t("weekend_status"),
+        }.get(_status_key, status_text)
 
         self.lbl_badge.config(text=localized_status, bg=color)
 

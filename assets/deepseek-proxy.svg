@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="DeepSeek Proxy App-Icon">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#26324A"/>
+      <stop offset="1" stop-color="#0C1424"/>
+    </linearGradient>
+    <linearGradient id="acc" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#34D399"/>
+      <stop offset="1" stop-color="#2DD4BF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Grundform: abgerundetes Quadrat -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+
+  <!-- Tacho-Skala (gedämpfter Track) -->
+  <path d="M 116 300 A 140 140 0 0 1 396 300" fill="none" stroke="#334155" stroke-width="34" stroke-linecap="round"/>
+
+  <!-- Grünes Niedrigkosten-Segment -->
+  <path d="M 116 300 A 140 140 0 0 1 213 167" fill="none" stroke="url(#acc)" stroke-width="34" stroke-linecap="round"/>
+
+  <!-- Teilstriche -->
+  <g stroke="#64748B" stroke-width="8" stroke-linecap="round">
+    <line x1="256" y1="182" x2="256" y2="168"/>
+    <line x1="315" y1="198" x2="322" y2="186"/>
+    <line x1="358" y1="241" x2="370" y2="234"/>
+    <line x1="374" y1="300" x2="388" y2="300"/>
+  </g>
+
+  <!-- Zeiger (in Richtung grünes Segment) -->
+  <line x1="256" y1="300" x2="188" y2="233" stroke="#E2E8F0" stroke-width="14" stroke-linecap="round"/>
+  <line x1="256" y1="300" x2="282" y2="326" stroke="#E2E8F0" stroke-width="14" stroke-linecap="round"/>
+
+  <!-- Zeiger-Nabe -->
+  <circle cx="256" cy="300" r="24" fill="#E2E8F0"/>
+  <circle cx="256" cy="300" r="11" fill="#0C1424"/>
+
+  <!-- "proxy" unter dem Tachometer -->
+  <text x="256" y="408" text-anchor="middle" font-family="Segoe UI, system-ui, -apple-system, Roboto, sans-serif" font-size="52" font-weight="600" fill="#E2E8F0">proxy</text>
+</svg>

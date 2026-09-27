@@ -1,10 +1,10 @@
-"""API-Key-Fingerprints und Auflösung von manuellen Key-Labels.
+"""API key fingerprints and resolution of manual key labels.
 
-Es wird niemals der Klartext-API-Key gespeichert oder geloggt. Stattdessen
-wird pro Request ein SHA-256-Fingerprint des Keys berechnet, der zur
-Zuordnung und Filterung der Usage-Einträge dient.
+The plaintext API key is never stored or logged. Instead, a SHA-256 fingerprint
+of the key is computed per request, which is used to associate and filter the
+usage entries.
 
-Öffentliche Symbole:
+Public symbols:
     * :func:`fingerprint_key`
     * :func:`resolve_label`
 """
@@ -22,14 +22,14 @@ __all__ = ["fingerprint_key", "resolve_label"]
 
 
 def fingerprint_key(api_key: str) -> str:
-    """Berechnet den SHA-256-Hexdigest eines API-Keys.
+    """Compute the SHA-256 hex digest of an API key.
 
-    Parameter:
-        api_key: Der Klartext-API-Key (oder ein leerer/``None``-Wert).
+    Parameters:
+        api_key: The plaintext API key (or an empty/``None`` value).
 
     Returns:
-        Voller 64-stelliger Hexdigest des UTF-8-kodierten Keys. Für einen
-        leeren oder ``None``-Key wird ein leerer String zurückgegeben.
+        Full 64-character hex digest of the UTF-8-encoded key. An empty
+        string is returned for an empty or ``None`` key.
     """
     if not api_key:
         return ""
@@ -37,10 +37,10 @@ def fingerprint_key(api_key: str) -> str:
 
 
 def resolve_label(storage: Storage, fingerprint: str) -> str:
-    """Liefert das gespeicherte Label für ``fingerprint``.
+    """Return the stored label for ``fingerprint``.
 
-    Ist kein Label gesetzt (oder ist der Fingerprint leer), wird ein
-    stabiler Fallback in der Form ``key-<erste 8 Zeichen>`` zurückgegeben.
+    If no label is set (or the fingerprint is empty), a stable fallback in the
+    form ``key-<first 8 characters>`` is returned.
     """
     if not fingerprint:
         return "key-unknown"

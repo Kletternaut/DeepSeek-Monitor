@@ -1,17 +1,17 @@
-"""Preis-Modell und Peak/Off-Peak-Logik für DeepSeek/Anthropic-Modelle.
+"""Price model and peak/off-peak logic for DeepSeek/Anthropic models.
 
-Die Preise sind in USD pro 1 Million Token angegeben. Die Default-Tabelle in
-:data:`DEFAULT_PRICING` ist der verifizierte Startwert (DeepSeek-Pricing-Seite)
-und kann vollständig über die Persistenz (:func:`load_pricing` /
-:func:`save_pricing`) angepasst werden.
+Prices are given in USD per 1 million tokens. The default table in
+:data:`DEFAULT_PRICING` is the verified starting value (DeepSeek pricing page)
+and can be fully adjusted via persistence (:func:`load_pricing` /
+:func:`save_pricing`).
 
-Peak/Off-Peak-Zeitfenster (UTC): 01:00–04:00 und 06:00–10:00. Wochenenden in
-Beijing-Zeit (``Asia/Shanghai``) gelten durchgehend als Off-Peak.
+Peak/off-peak windows (UTC): 01:00–04:00 and 06:00–10:00. Weekends in Beijing
+time (``Asia/Shanghai``) count entirely as off-peak.
 
-Bekannte Einschränkung: Chinesische Feiertage werden NICHT speziell behandelt
-(sie gelten daher fälschlich als Peak, sofern sie auf einen Werktag fallen).
+Known limitation: Chinese public holidays are NOT handled specially (they are
+therefore incorrectly treated as peak when they fall on a weekday).
 
-Öffentliche Symbole:
+Public symbols:
     * :data:`DEFAULT_PRICING`
     * :func:`load_pricing`
     * :func:`save_pricing`
@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
-if TYPE_CHECKING:  # pragma: no cover - nur für Type-Hints
+if TYPE_CHECKING:  # pragma: no cover - only for type hints
     from .storage import Storage
 
 logger = logging.getLogger("deepseek_proxy.pricing")
@@ -46,10 +46,10 @@ __all__ = [
     "fetch_latest_pricing",
 ]
 
-#: Settings-Key, unter dem die Preis-Tabelle als JSON persistiert wird.
+#: Settings key under which the price table is persisted as JSON.
 PRICING_SETTING_KEY = "pricing"
 
-#: Verifizierte Default-Preise in USD pro 1 Million Token.
+#: Verified default prices in USD per 1 million tokens.
 DEFAULT_PRICING: dict = {
     "deepseek-flash": {
         "off_peak": {"cache_hit": 0.003, "cache_miss": 0.15, "output": 0.60},
@@ -61,32 +61,32 @@ DEFAULT_PRICING: dict = {
     },
 }
 
-#: Fallback-Tarif, falls Modell oder Zone nicht in der Preis-Tabelle existiert.
+#: Fallback tariff if model or zone does not exist in the price table.
 _FALLBACK_TARIFF = {"cache_hit": 0.003, "cache_miss": 0.15, "output": 0.60}
 
-#: Peak-Fenster als ``(start_minute, end_minute)`` in UTC; ``start`` inklusiv,
-#: ``end`` exklusiv (Minuten seit Mitternacht).
+#: Peak windows as ``(start_minute, end_minute)`` in UTC; ``start`` inclusive,
+#: ``end`` exclusive (minutes since midnight).
 _PEAK_WINDOWS_UTC: tuple[tuple[int, int], ...] = ((1 * 60, 4 * 60), (6 * 60, 10 * 60))
 
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
 
-#: Preisfelder in der Reihenfolge der DeepSeek-Tabelle (off-peak-Zeile, dann
-#: peak-Zeile): cache_hit, cache_miss, output.
+#: Price fields in the order of the DeepSeek table (off-peak row, then peak
+#: row): cache_hit, cache_miss, output.
 _ROW_FIELDS = ("cache_hit", "cache_miss", "output")
 
 
 def _deep_copy_default() -> dict:
-    """Tiefe Kopie der Default-Preis-Tabelle."""
+    """Deep copy of the default price table."""
     return copy.deepcopy(DEFAULT_PRICING)
 
 
 def load_pricing(storage: "Storage | None" = None) -> dict:
-    """Lädt die Preis-Tabelle aus ``storage`` (JSON) oder liefert die Defaults.
+    """Load the price table from ``storage`` (JSON) or return the defaults.
 
-    Parameter:
-        storage: Optionale :class:`~proxy.storage.Storage`. Bei ``None`` oder
-            fehlendem/ungültigem Eintrag wird eine tiefe Kopie von
-            :data:`DEFAULT_PRICING` zurückgegeben.
+    Parameters:
+        storage: Optional :class:`~proxy.storage.Storage`. For ``None`` or a
+            missing/invalid entry, a deep copy of :data:`DEFAULT_PRICING` is
+            returned.
     """
     if storage is None:
         return _deep_copy_default()
@@ -98,29 +98,29 @@ def load_pricing(storage: "Storage | None" = None) -> dict:
     try:
         parsed = json.loads(raw)
     except (TypeError, ValueError) as exc:
-        logger.warning("Ungültiges Pricing-JSON in Settings: %s", exc)
+        logger.warning("Invalid pricing JSON in settings: %s", exc)
         return _deep_copy_default()
 
     if not isinstance(parsed, dict) or not parsed:
-        logger.warning("Pricing-Setting ist kein nicht-leeres Dict, nutze Defaults.")
+        logger.warning("Pricing setting is not a non-empty dict, using defaults.")
         return _deep_copy_default()
 
     return parsed
 
 
 def save_pricing(storage: "Storage", pricing: dict) -> None:
-    """Persistiert ``pricing`` als JSON-String unter dem Settings-Key ``pricing``."""
+    """Persist ``pricing`` as a JSON string under the settings key ``pricing``."""
     storage.set_setting(PRICING_SETTING_KEY, json.dumps(pricing))
 
 
 def normalize_model(model: str) -> str:
-    """Mappt einen Modellnamen auf einen Preisschlüssel.
+    """Map a model name to a price key.
 
-    Regeln:
+    Rules:
         * ``pro`` / ``v4-pro`` / ``opus`` → ``"deepseek-v4-pro"``
         * ``flash`` / ``sonnet`` / ``haiku`` → ``"deepseek-flash"``
-        * unbekannt/leer → ``"deepseek-flash"`` (DeepSeek mappt Unbekanntes
-          ebenfalls auf das günstige ``flash``-Modell).
+        * unknown/empty → ``"deepseek-flash"`` (DeepSeek maps unknown models
+          to the cheap ``flash`` model too).
     """
     name = (model or "").strip().lower()
 
@@ -132,14 +132,14 @@ def normalize_model(model: str) -> str:
 
 
 def is_peak(timestamp_iso: str) -> bool:
-    """Prüft, ob der Zeitpunkt in der Peak-Zone liegt.
+    """Check whether the point in time lies in the peak zone.
 
-    Der Zeitstempel wird per :func:`datetime.fromisoformat` geparst und nach UTC
-    konvertiert. Ein Zeitstempel ohne Offset wird als UTC angenommen. Bei einem
-    Parse-Fehler oder ``None`` wird ``False`` (Off-Peak) zurückgegeben.
+    The timestamp is parsed via :func:`datetime.fromisoformat` and converted to
+    UTC. A timestamp without offset is assumed to be UTC. On a parse error or
+    ``None``, ``False`` (off-peak) is returned.
 
-    Ein Zeitpunkt, der in Beijing-Zeit auf Samstag oder Sonntag fällt, ist immer
-    Off-Peak. Chinesische Feiertage werden nicht berücksichtigt.
+    A point in time that falls on Saturday or Sunday in Beijing time is always
+off-peak. Chinese public holidays are not considered.
     """
     if not timestamp_iso:
         return False
@@ -147,17 +147,17 @@ def is_peak(timestamp_iso: str) -> bool:
     try:
         dt = datetime.fromisoformat(timestamp_iso)
     except (TypeError, ValueError):
-        logger.debug("is_peak: nicht parsebarer Zeitstempel %r", timestamp_iso)
+        logger.debug("is_peak: unparseable timestamp %r", timestamp_iso)
         return False
 
     if dt.tzinfo is None:
-        # Naive Zeitstempel: konservativ als UTC interpretieren (dokumentierte
-        # Annahme, da das erwartete Format einen Offset enthält).
+        # Naive timestamp: conservatively interpret as UTC (documented
+        # assumption, since the expected format contains an offset).
         dt = dt.replace(tzinfo=timezone.utc)
 
     utc_dt = dt.astimezone(timezone.utc)
 
-    # Wochenende in Beijing-Zeit → immer Off-Peak.
+    # Weekend in Beijing time → always off-peak.
     if dt.astimezone(_SHANGHAI).weekday() >= 5:
         return False
 
@@ -169,7 +169,7 @@ def is_peak(timestamp_iso: str) -> bool:
 
 
 def _zone_key(timestamp_iso: str) -> str:
-    """Liefert ``"peak"`` oder ``"off_peak"`` zum Zeitstempel."""
+    """Return ``"peak"`` or ``"off_peak"`` for the timestamp."""
     return "peak" if is_peak(timestamp_iso) else "off_peak"
 
 
@@ -178,10 +178,10 @@ def get_tariff(
     timestamp_iso: str,
     pricing: dict | None = None,
 ) -> dict:
-    """Liefert ``{cache_hit, cache_miss, output}`` für Modell und Zone.
+    """Return ``{cache_hit, cache_miss, output}`` for the model and zone.
 
-    Fallback ist immer ``deepseek-flash``/``off_peak`` aus der geladenen Tabelle,
-    falls Modell oder Zone fehlen oder ungültig sind.
+    The fallback is always ``deepseek-flash``/``off_peak`` from the loaded table
+    if the model or zone is missing or invalid.
     """
     table = pricing if pricing is not None else load_pricing()
     model_key = normalize_model(model)
@@ -215,55 +215,53 @@ _AMOUNT_RE = re.compile(r"\$\s*([0-9]+(?:\.[0-9]+)?)")
 
 
 def _extract_row_amounts(text: str, start: int, end: int) -> list[float]:
-    """Extrahiert alle ``$``-Beträge im Textbereich ``[start, end)``."""
+    """Extract all ``$`` amounts in the text range ``[start, end)``."""
     chunk = text[start:end]
     return [float(m) for m in _AMOUNT_RE.findall(chunk)]
 
 
 def fetch_latest_pricing() -> dict | None:
-    """Versucht, die aktuelle Preis-Tabelle von der DeepSeek-Doku zu laden.
+    """Attempt to load the current price table from the DeepSeek docs.
 
-    Best-Effort: Die Doku-Seite ist HTML und ihr Layout kann sich ändern. Es wird
-    davon ausgegangen, dass je Modell sechs ``$``-Beträge in der Reihenfolge
-    ``cache_hit(off), cache_miss(off), output(off), cache_hit(peak),
-    cache_miss(peak), output(peak)`` auftreten. Zusätzlich muss gelten
-    ``peak >= off_peak`` pro Kategorie.
+    Best effort: the docs page is HTML and its layout can change. It is assumed
+    that six ``$`` amounts appear per model in the order ``cache_hit(off),
+    cache_miss(off), output(off), cache_hit(peak), cache_miss(peak),
+    output(peak)``. Additionally, ``peak >= off_peak`` must hold per category.
 
     Returns:
-        Die geparste Tabelle im :data:`DEFAULT_PRICING`-Format oder ``None``,
-        wenn kein sicheres Ergebnis extrahiert werden konnte. Es werden NIE
-        Werte geraten. Der Aufrufer entscheidet (mit Bestätigung), ob er das
-        Ergebnis übernimmt.
+        The parsed table in the :data:`DEFAULT_PRICING` format, or ``None`` if
+        no safe result could be extracted. Values are NEVER guessed. The caller
+decides (with confirmation) whether to adopt the result.
     """
-    from urllib.request import Request, urlopen  # lokal: nur bei Bedarf laden
+    from urllib.request import Request, urlopen  # locally: only load on demand
 
     try:
         request = Request(_PRICING_URL, headers={"User-Agent": "deepseek-proxy/1.0"})
         with urlopen(request, timeout=10) as response:  # noqa: S310 (feste URL)
             raw_bytes = response.read()
-    except Exception as exc:  # noqa: BLE001 - jeder Netzfehler → None
-        logger.warning("fetch_latest_pricing: Abruf fehlgeschlagen: %s", exc)
+    except Exception as exc:  # noqa: BLE001 - any network error → None
+        logger.warning("fetch_latest_pricing: fetch failed: %s", exc)
         return None
 
     try:
         html = raw_bytes.decode("utf-8", errors="replace")
-    except Exception:  # pragma: no cover - decode mit replace schlägt praktisch nie fehl
+    except Exception:  # pragma: no cover - decode with replace practically never fails
         return None
 
-    # Tags grob entfernen, um Positions-Abstände zu behalten.
+    # Roughly remove tags to keep positional distances.
     text = re.sub(r"<[^>]+>", " ", html)
     text = re.sub(r"&nbsp;?", " ", text)
 
     flash_match = _FLASH_ROW_RE.search(text)
     pro_match = _PRO_ROW_RE.search(text)
     if not flash_match or not pro_match:
-        logger.info("fetch_latest_pricing: Modellzeilen nicht gefunden.")
+        logger.info("fetch_latest_pricing: model rows not found.")
         return None
 
     boundaries = sorted({flash_match.start(), pro_match.start(), len(text)})
 
     def _row_amounts(pos: int) -> list[float] | None:
-        # Nächste Zeilengrenze bestimmen.
+        # Determine the next line boundary.
         next_pos = len(text)
         for b in boundaries:
             if b > pos:
@@ -275,7 +273,7 @@ def fetch_latest_pricing() -> dict | None:
     flash_amounts = _row_amounts(flash_match.start())
     pro_amounts = _row_amounts(pro_match.start())
     if flash_amounts is None or pro_amounts is None:
-        logger.info("fetch_latest_pricing: unerwartete Anzahl Beträge pro Zeile.")
+        logger.info("fetch_latest_pricing: unexpected number of amounts per row.")
         return None
 
     def _build(amounts: list[float]) -> dict | None:
@@ -289,7 +287,7 @@ def fetch_latest_pricing() -> dict | None:
     flash_entry = _build(flash_amounts)
     pro_entry = _build(pro_amounts)
     if flash_entry is None or pro_entry is None:
-        logger.info("fetch_latest_pricing: Werte nicht plausibel (peak < off_peak).")
+        logger.info("fetch_latest_pricing: values not plausible (peak < off_peak).")
         return None
 
     return {"deepseek-flash": flash_entry, "deepseek-v4-pro": pro_entry}

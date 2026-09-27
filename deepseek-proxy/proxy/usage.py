@@ -1,9 +1,9 @@
-"""Token-Usage-Datenmodell und Zusammenführen von Usage-Objekten.
+"""Token usage data model and merging of usage objects.
 
-Die Anthropic Messages API liefert die Token-Nutzung verteilt über mehrere
-SSE-Events (``message_start`` enthält z. B. bereits die Input-Token,
-``message_delta`` die finalen Output-Token). ``merge_usage`` führt diese
-Teilinformationen in einem :class:`TokenUsage` zusammen.
+The Anthropic Messages API delivers token usage spread over several SSE events
+(``message_start`` already contains e.g. the input tokens, ``message_delta`` the
+final output tokens). ``merge_usage`` merges these partial pieces of information
+into a :class:`TokenUsage`.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ logger = logging.getLogger("deepseek_proxy.usage")
 
 _BERLIN = ZoneInfo("Europe/Berlin")
 
-# Tolerierte Feldnamen im rohen ``usage``-Objekt, in Prioritätsreihenfolge.
+# Tolerated field names in the raw ``usage`` object, in priority order.
 _INPUT_KEYS = ("input_tokens", "prompt_tokens")
 _OUTPUT_KEYS = ("output_tokens", "completion_tokens")
 _CACHE_CREATION_KEYS = ("cache_creation_input_tokens", "prompt_cache_miss_tokens")
@@ -27,13 +27,13 @@ _TOTAL_KEYS = ("total_tokens",)
 
 
 def now_iso_berlin() -> str:
-    """Aktuelle Zeit als ISO-8601-String mit Europe/Berlin-Offset."""
+    """Current time as ISO-8601 string with Europe/Berlin offset."""
     return datetime.now(_BERLIN).isoformat(timespec="seconds")
 
 
 @dataclass
 class TokenUsage:
-    """Zusammengeführte Token-Nutzung eines Requests."""
+    """Merged token usage of a request."""
 
     timestamp: str = field(default_factory=now_iso_berlin)
     input_tokens: int = 0
@@ -48,22 +48,22 @@ class TokenUsage:
 
 
 def _int(obj: dict, key: str) -> int:
-    """Konvertiert ``obj[key]`` sicher zu ``int``; bei Fehler ``0``."""
+    """Convert ``obj[key]`` safely to ``int``; ``0`` on error."""
     value = obj.get(key)
     if value is None:
         return 0
-    if isinstance(value, bool):  # bool ist subklasse von int -> explizit ablehnen
-        logger.warning("Unerwarteter boolescher Token-Wert für %r: %r", key, value)
+    if isinstance(value, bool):  # bool is a subclass of int -> reject explicitly
+        logger.warning("Unexpected boolean token value for %r: %r", key, value)
         return 0
     try:
         return int(value)
     except (TypeError, ValueError):
-        logger.warning("Unerwarteter Token-Wert für %r: %r", key, value)
+        logger.warning("Unexpected token value for %r: %r", key, value)
         return 0
 
 
 def _first_present(usage: dict, keys: tuple[str, ...]) -> str | None:
-    """Erster Schlüssel aus ``keys``, der in ``usage`` vorhanden (nicht None) ist."""
+    """First key from ``keys`` that is present (not None) in ``usage``."""
     for key in keys:
         if usage.get(key) is not None:
             return key
@@ -71,17 +71,17 @@ def _first_present(usage: dict, keys: tuple[str, ...]) -> str | None:
 
 
 def _apply(usage: dict, keys: tuple[str, ...], target: TokenUsage, attr: str) -> None:
-    """Überträgt das erste vorhandene Feld aus ``keys`` auf ``target.attr``."""
+    """Transfer the first present field from ``keys`` to ``target.attr``."""
     key = _first_present(usage, keys)
     if key is not None:
         setattr(target, attr, _int(usage, key))
 
 
 def merge_usage(obj: dict, existing: TokenUsage) -> TokenUsage:
-    """Führt die Usage-Informationen aus ``obj`` in ``existing`` ein.
+    """Merge the usage information from ``obj`` into ``existing``.
 
-    Nur Felder, die im Event tatsächlich vorhanden sind, werden überschrieben.
-    ``existing`` wird in-place verändert und zurückgegeben.
+    Only fields that are actually present in the event are overwritten.
+    ``existing`` is mutated in place and returned.
     """
     if not isinstance(obj, dict):
         return existing
@@ -97,7 +97,7 @@ def merge_usage(obj: dict, existing: TokenUsage) -> TokenUsage:
     else:
         usage = None
 
-    # ``model`` kann top-level oder im verschachtelten ``message``-Objekt stehen.
+    # ``model`` can be top-level or inside the nested ``message`` object.
     message = obj.get("message")
     message = message if isinstance(message, dict) else {}
 
@@ -113,9 +113,9 @@ def merge_usage(obj: dict, existing: TokenUsage) -> TokenUsage:
 
 
 def extract_usage_from_event(event: dict) -> TokenUsage | None:
-    """Erzeugt aus einem einzelnen Event ein :class:`TokenUsage`.
+    """Create a :class:`TokenUsage` from a single event.
 
-    Liefert ``None``, wenn das Event kein ``usage``-Objekt enthält.
+    Returns ``None`` if the event contains no ``usage`` object.
     """
     if not isinstance(event, dict):
         return None
@@ -126,15 +126,15 @@ def extract_usage_from_event(event: dict) -> TokenUsage | None:
 
 
 def finalize_usage(usage: TokenUsage) -> TokenUsage:
-    """Berechnet ``total_tokens`` als Fallback, falls es nicht im Stream war.
+    """Compute ``total_tokens`` as a fallback if it was not in the stream.
 
-    DeepSeek liefert im Anthropic-Stream kein ``total_tokens``. Da ``input_tokens``
-    bei DeepSeek den Cache-MISS-Anteil und ``cache_read_input_tokens`` den
-    Cache-HIT-Anteil melden (additiv), gilt:
+    DeepSeek does not deliver ``total_tokens`` in the Anthropic stream. Since
+    ``input_tokens`` reports the cache-MISS share and ``cache_read_input_tokens``
+    the cache-HIT share for DeepSeek (additive), the following holds:
     ``total_tokens = input_tokens + cache_read_input_tokens + output_tokens``.
 
-    Es wird nur überschrieben, wenn ``total_tokens`` noch ``0`` ist -- liefert
-    DeepSeek künftig einen eigenen Wert, bleibt dieser erhalten.
+    It is only overwritten when ``total_tokens`` is still ``0`` -- if DeepSeek
+delivers its own value in the future, it is preserved.
     """
     if usage.total_tokens == 0:
         usage.total_tokens = (

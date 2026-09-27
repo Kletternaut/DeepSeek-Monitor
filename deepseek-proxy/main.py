@@ -1,17 +1,17 @@
-"""Standalone-Einstiegspunkt für den DeepSeek-Anthropic-Proxy.
+"""Standalone entry point for the DeepSeek-Anthropic proxy.
 
-Startet den Streaming-Proxy samt Token-Überwachung und (optional) Web-Dashboard
-und wartet auf ``SIGINT``/``SIGTERM``, um den Server sauber herunterzufahren.
+Starts the streaming proxy including token monitoring and (optionally) the web
+dashboard, and waits for ``SIGINT``/``SIGTERM`` to shut the server down cleanly.
 
-Aufruf (aus dem Projekt-Root, damit das Paket ``proxy`` importierbar ist)::
+Invocation (from the project root, so the ``proxy`` package is importable)::
 
     .venv/bin/python main.py --port 8000
 
-Nur die (read-only) Tkinter-Detailansicht starten -- ohne Proxy-Server::
+Start only the (read-only) Tkinter detail view -- without the proxy server::
 
     .venv/bin/python main.py --view
 
-Öffentliche Symbole:
+Public symbols:
     * :func:`main`
     * :func:`parse_args`
 """
@@ -34,87 +34,87 @@ __all__ = ["main", "parse_args"]
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parst die Kommandozeilenargumente des Standalone-Servers."""
+    """Parse the command-line arguments of the standalone server."""
     parser = argparse.ArgumentParser(
         prog="main.py",
         description=(
-            "Streaming-Proxy zwischen VS Code (Anthropic Messages API) und "
-            "DeepSeek mit Token-Usage-Monitoring und Web-Dashboard."
+            "Streaming proxy between VS Code (Anthropic Messages API) and "
+            "DeepSeek with token usage monitoring and web dashboard."
         ),
     )
     parser.add_argument(
         "--host",
         default="127.0.0.1",
-        help="Bind-Adresse des Proxy-Servers (Default: 127.0.0.1).",
+        help="Bind address of the proxy server (default: 127.0.0.1).",
     )
     parser.add_argument(
         "--port",
         type=int,
         default=8000,
-        help="Bind-Port des Proxy-Servers (Default: 8000).",
+        help="Bind port of the proxy server (default: 8000).",
     )
     parser.add_argument(
         "--upstream",
         default=DEFAULT_UPSTREAM_URL,
-        help=f"Upstream-URL der DeepSeek-Anthropic-API (Default: {DEFAULT_UPSTREAM_URL}).",
+        help=f"Upstream URL of the DeepSeek-Anthropic API (default: {DEFAULT_UPSTREAM_URL}).",
     )
     parser.add_argument(
         "--db",
         default=None,
-        help="Pfad zur SQLite-Datenbank (Default: Storage-Standardpfad).",
+        help="Path to the SQLite database (default: storage default path).",
     )
     parser.add_argument(
         "--no-dashboard",
         action="store_true",
-        help="Web-Dashboard nicht registrieren.",
+        help="Do not register the web dashboard.",
     )
     parser.add_argument(
         "--view",
         action="store_true",
         default=False,
         help=(
-            "Nur die Tkinter-Detailansicht (Kosten & Verbrauch) starten -- "
-            "KEIN Proxy-Server. Der Server läuft separat."
+            "Start only the Tkinter detail view (Cost & Usage) -- "
+            "NO proxy server. The server runs separately."
         ),
     )
     parser.add_argument(
         "--influx-url",
         default=None,
         help=(
-            "Optionale InfluxDB-2.x-Basis-URL (z. B. http://192.168.0.32:8086). "
-            "Wenn gesetzt, wird die Usage zusätzlich in InfluxDB geschrieben."
+            "Optional InfluxDB 2.x base URL (e.g. http://<INFLUX_HOST>:8086). "
+            "When set, usage is additionally written to InfluxDB."
         ),
     )
     parser.add_argument(
         "--influx-token",
         default=None,
-        help="API-Token für InfluxDB (Default: Umgebungsvariable DEEPSEEK_INFLUX_TOKEN).",
+        help="API token for InfluxDB (default: environment variable DEEPSEEK_INFLUX_TOKEN).",
     )
     parser.add_argument(
         "--influx-org",
         default=None,
-        help="InfluxDB-Organisation (Default: Umgebungsvariable DEEPSEEK_INFLUX_ORG).",
+        help="InfluxDB organization (default: environment variable DEEPSEEK_INFLUX_ORG).",
     )
     parser.add_argument(
         "--influx-bucket",
         default=None,
-        help="InfluxDB-Bucket (Default: Umgebungsvariable DEEPSEEK_INFLUX_BUCKET).",
+        help="InfluxDB bucket (default: environment variable DEEPSEEK_INFLUX_BUCKET).",
     )
     parser.add_argument(
         "--host-name",
         default=None,
-        help="Hostname für das InfluxDB-`host`-Tag (Default: socket.gethostname()).",
+        help="Hostname for the InfluxDB `host` tag (default: socket.gethostname()).",
     )
     return parser.parse_args(argv)
 
 
 def _build_usage_callback(args: argparse.Namespace, storage: Storage):
-    """Erzeugt den ``usage_callback`` inklusive optionalem InfluxDB-Sink.
+    """Build the ``usage_callback`` including the optional InfluxDB sink.
 
-    SQLite bleibt immer aktiv. Ist InfluxDB konfiguriert (``--influx-url``
-    bzw. ``DEEPSEEK_INFLUX_URL``), wird zusätzlich in InfluxDB geschrieben.
-    Ein Fehler im Influx-Sink darf die SQLite-Persistenz nicht beeinträchtigen
-    und den Stream niemals brechen.
+    SQLite always stays active. If InfluxDB is configured (``--influx-url``
+    or ``DEEPSEEK_INFLUX_URL``), usage is additionally written to InfluxDB.
+    An error in the Influx sink must not impair the SQLite persistence and
+    must never break the stream.
     """
     influx_url = args.influx_url or os.environ.get("DEEPSEEK_INFLUX_URL")
     influx_token = args.influx_token or os.environ.get("DEEPSEEK_INFLUX_TOKEN")
@@ -136,15 +136,15 @@ def _build_usage_callback(args: argparse.Namespace, storage: Storage):
     )
 
     def combined_callback(usage) -> None:
-        # Lokale Persistenz zuerst (kritisch), dann best-effort Influx.
+        # Local persistence first (critical), then best-effort Influx.
         storage.save_usage(usage)
         try:
             sink.write(usage)
-        except Exception:  # noqa: BLE001 - Influx ist rein optional
-            logger.exception("InfluxDB-Schreiben fehlgeschlagen (ignoriert)")
+        except Exception:  # noqa: BLE001 - Influx is purely optional
+            logger.exception("InfluxDB write failed (ignored)")
 
     logger.info(
-        "InfluxDB-Sink aktiviert: %s (org=%s, bucket=%s, host=%s)",
+        "InfluxDB sink enabled: %s (org=%s, bucket=%s, host=%s)",
         influx_url,
         influx_org,
         influx_bucket,
@@ -154,7 +154,7 @@ def _build_usage_callback(args: argparse.Namespace, storage: Storage):
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Startet den Proxy und wartet, bis ein Beendigungssignal eintrifft."""
+    """Start the proxy and wait until a termination signal arrives."""
     args = parse_args(argv)
 
     logging.basicConfig(
@@ -165,12 +165,12 @@ def main(argv: list[str] | None = None) -> int:
     storage = Storage(args.db)
 
     if args.view:
-        # Nur die Desktop-Detailansicht starten -- kein Proxy-Server, kein
-        # Dashboard. tkinter wird erst hier (lazy) importiert, damit der
-        # Server-Betrieb keine tkinter-Abhängigkeit benötigt.
+        # Start only the desktop detail view -- no proxy server, no dashboard.
+        # tkinter is imported here (lazily), so server operation does not
+        # require a tkinter dependency.
         from proxy.tkinter_view import UsageDetailApp
 
-        logger.info("Starte Tkinter-Detailansicht (read-only, ohne Proxy-Server)")
+        logger.info("Starting Tkinter detail view (read-only, no proxy server)")
         UsageDetailApp(storage).run()
         return 0
 
@@ -185,28 +185,28 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.no_dashboard:
         add_dashboard_routes(server.app, storage)
-        logger.info("Dashboard aktiviert unter %s/", server.base_url)
+        logger.info("Dashboard enabled at %s/", server.base_url)
     else:
-        logger.info("Dashboard deaktiviert (--no-dashboard)")
+        logger.info("Dashboard disabled (--no-dashboard)")
 
     stop_event = threading.Event()
 
     def _handle_signal(signum: int, frame: object | None) -> None:
-        logger.info("Signal %s empfangen -- fahre herunter", signal.Signals(signum).name)
+        logger.info("Signal %s received -- shutting down", signal.Signals(signum).name)
         stop_event.set()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, _handle_signal)
 
     server.start()
-    logger.info("Proxy bereit unter %s", server.base_url)
+    logger.info("Proxy ready at %s", server.base_url)
 
     try:
-        # Warten auf SIGINT/SIGTERM; nutzt keinen Busy-Wait.
+        # Wait for SIGINT/SIGTERM; no busy wait.
         stop_event.wait()
     finally:
         server.stop()
-        logger.info("Proxy gestoppt")
+        logger.info("Proxy stopped")
 
     return 0
 

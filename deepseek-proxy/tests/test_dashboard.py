@@ -1,4 +1,4 @@
-"""Tests für die Dashboard-Routen (Usage/Summary/Labels/Pricing)."""
+"""Tests for the dashboard routes (usage/summary/labels/pricing)."""
 
 import asyncio
 
@@ -32,7 +32,7 @@ async def _post(app, path, json_body=None):
 
 
 def _seed(storage):
-    """Fügt zwei Usage-Events mit unterschiedlichen Keys/Modellen ein."""
+    """Insert two usage events with different keys/models."""
     ts = now_iso_berlin()
     storage.save_usage(
         TokenUsage(
@@ -60,7 +60,7 @@ def _seed(storage):
 
 def test_index_returns_html():
     async def run():
-        storage = Storage()  # temporärer Default-Pfad ist ok für diesen Test
+        storage = Storage()  # temporary default path is fine for this test
         app = _make_app(storage)
         resp = await _get(app, "/")
         assert resp.status_code == 200

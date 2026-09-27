@@ -1,0 +1,54 @@
+[project]
+name = "deepseek-monitor"
+version = "2.4.0"
+description = "Eigenständiges Open-Source-Tool zur Überwachung von DeepSeek-API-Kosten und -Verbrauch. Kein offizielles DeepSeek-Produkt; steht in keiner Verbindung zu DeepSeek (深度求索)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Kletternaut" }]
+keywords = ["deepseek", "proxy", "monitoring", "usage", "cost", "influxdb"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "httpx>=0.27",
+    "influxdb-client>=1.39",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "black>=24.0",
+    "mypy>=1.8",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["deepseek-proxy"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = ["E501"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.pytest.ini_options]
+testpaths = ["deepseek-proxy/tests", "tests"]
+addopts = "-q"
+
+[tool.mypy]
+python_version = "3.10"
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true

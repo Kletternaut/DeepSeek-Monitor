@@ -1,0 +1,26 @@
+[Desktop Entry]
+Type=Application
+Name=DeepSeek Proxy
+Comment=Start the DeepSeek streaming proxy manually (without systemd)
+Icon=/opt/deepseek-monitor/assets/deepseek-proxy-256.png
+Exec=/opt/deepseek-monitor/deepseek-proxy/.venv/bin/python /opt/deepseek-monitor/deepseek-proxy/main.py
+Terminal=true
+Categories=Development;Network;
+Keywords=DeepSeek;Proxy;Monitoring;Usage;
+
+# ---------------------------------------------------------------------------
+# Example desktop entry to start the proxy manually instead of via systemd.
+#
+# How to use:
+#   1. Adjust the paths above to your installation location
+#      (replace /opt/deepseek-monitor with your checkout path, e.g.
+#       /home/<user>/DeepSeek-Monitor).
+#   2. Copy this file to ~/.local/share/applications/deepseek-proxy.desktop
+#      (or /usr/share/applications/ for all users).
+#   3. Make it executable if you placed it on your desktop:
+#        chmod +x deepseek-proxy.desktop
+#
+# The proxy runs in a terminal (Terminal=true) so you can see its log output
+# and stop it with Ctrl+C. For a background service, prefer the systemd unit
+# (deepseek-proxy.service) instead.
+# ---------------------------------------------------------------------------

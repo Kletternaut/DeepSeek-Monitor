@@ -1,18 +1,18 @@
-"""Inkrementeller Server-Sent-Events (SSE)-Parser.
+"""Incremental Server-Sent Events (SSE) parser.
 
-Rein und ohne I/O: Es wird nur der rohe Bytestrom (z. B. aus einer
-Anthropic-Messages-Antwort) entgegengenommen und in Events umgewandelt.
+Pure and without I/O: only the raw byte stream (e.g. from an Anthropic Messages
+response) is taken in and converted into events.
 
-Unterstützt:
-  * Events über mehrere Chunks verteilt
-  * Mehrere Events pro Chunk
-  * UTF-8-Multibyte-Zeichen über Chunk-Grenzen verteilt
-  * CRLF- und LF-Zeilenenden
-  * Kommentar-Zeilen (``: keep-alive``) und ``id:``/``retry:`` (werden ignoriert)
-  * Unvollständige Events am Streamende (kein finales ``\\n\\n``)
+Supports:
+  * events spread over multiple chunks
+  * multiple events per chunk
+  * UTF-8 multibyte characters spread over chunk boundaries
+  * CRLF and LF line endings
+  * comment lines (``: keep-alive``) and ``id:``/``retry:`` (ignored)
+  * incomplete events at stream end (no final ``\n\n``)
 
-Es findet KEINE JSON-Dekodierung statt -- der Parser liefert lediglich
-Event-Name und den zusammengefügten ``data``-String.
+NO JSON decoding takes place -- the parser only delivers the event name and the
+concatenated ``data`` string.
 """
 
 from __future__ import annotations
@@ -27,12 +27,12 @@ OnEvent = Callable[[str | None, str | None], None]
 
 
 class SSEParser:
-    """Zustandsbehafteter, inkrementeller SSE-Parser.
+    """Stateful, incremental SSE parser.
 
-    Parameter:
-        on_event: Callback ``(event_name, data)``. ``event_name`` ist ``None``,
-            wenn das Event keinen ``event:``-Block hatte. ``data`` ist ``None``,
-            wenn keine ``data:``-Zeile vorhanden war.
+    Parameters:
+        on_event: Callback ``(event_name, data)``. ``event_name`` is ``None``
+            if the event had no ``event:`` block. ``data`` is ``None`` if no
+            ``data:`` line was present.
     """
 
     def __init__(self, on_event: OnEvent | None = None) -> None:
@@ -44,9 +44,9 @@ class SSEParser:
 
     # ------------------------------------------------------------------ helpers
     def _new_decoder(self) -> None:
-        # ``replace`` statt ``strict``: ungültige Bytes dürfen den Stream nicht
-        # abbrechen. Der inkrementelle Decoder puffert angebrochene Multibyte-
-        # Sequenzen selbst und gibt sie erst beim nächsten Chunk aus.
+        # ``replace`` instead of ``strict``: invalid bytes must not abort the
+        # stream. The incremental decoder buffers broken multibyte sequences
+        # itself and only emits them with the next chunk.
         self._decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
 
     def _reset_event(self) -> None:
@@ -55,22 +55,22 @@ class SSEParser:
 
     # --------------------------------------------------------------------- API
     def reset(self) -> None:
-        """Setzt den gesamten internen Zustand zurück."""
+        """Reset the entire internal state."""
         self._new_decoder()
         self._pending_line = ""
         self._reset_event()
 
     def feed(self, chunk: bytes | bytearray | memoryview | str) -> None:
-        """Füttert rohe Bytes; verarbeitet alle dadurch vollständig gewordenen Zeilen."""
+        """Feed raw bytes; process all lines that became complete."""
         if not chunk:
             return
-        if isinstance(chunk, str):  # defensiv: Text ebenfalls akzeptieren
+        if isinstance(chunk, str):  # defensively: accept text too
             chunk = chunk.encode("utf-8")
 
         text = self._decoder.decode(bytes(chunk))
 
-        # Zeilenweise verarbeiten. ``\n`` kann in UTF-8 nicht Teil einer
-        # Multibyte-Sequenz sein, daher ist das Aufteilen hier sicher.
+        # Process line by line. ``\n`` cannot be part of a multibyte sequence
+        # in UTF-8, so splitting here is safe.
         pending = self._pending_line + text
         start = 0
         while True:
@@ -83,18 +83,18 @@ class SSEParser:
 
     # ------------------------------------------------------------ line handling
     def _handle_line(self, line: str) -> None:
-        # CRLF tolerieren: ein eventuell vorhandenes '\r' am Zeilenende entfernen.
+        # Tolerate CRLF: remove a possible trailing '\r'.
         if line.endswith("\r"):
             line = line[:-1]
 
-        # Leerzeile -> Event ist abgeschlossen.
+        # Empty line -> event is complete.
         if line == "":
             self._dispatch()
             return
 
-        # Kommentar (z. B. ": keep-alive") -> vollständig ignorieren.
+        # Comment (e.g. ": keep-alive") -> ignore entirely.
         if line.startswith(":"):
-            logger.debug("SSE-Kommentar ignoriert: %r", line)
+            logger.debug("SSE comment ignored: %r", line)
             return
 
         if ":" in line:
@@ -109,9 +109,9 @@ class SSEParser:
         elif field == "data":
             self._data_lines.append(value)
         elif field in ("id", "retry"):
-            logger.debug("SSE-Feld %r ignoriert: %r", field, value)
+            logger.debug("SSE field %r ignored: %r", field, value)
         else:
-            logger.debug("Unbekanntes SSE-Feld %r ignoriert", field)
+            logger.debug("Unknown SSE field %r ignored", field)
 
     def _dispatch(self) -> None:
         event_name = self._event_name
@@ -127,5 +127,5 @@ class SSEParser:
         if self._on_event is not None:
             try:
                 self._on_event(event_name, data)
-            except Exception:  # Callback-Fehler dürfen den Parser nicht killen
+            except Exception:  # Callback errors must not kill the parser
                 logger.exception("Fehler im SSE on_event-Callback")

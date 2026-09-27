@@ -1,4 +1,4 @@
-"""Tests für Storage (SQLite) und Labels (Fingerprint + Label-Auflösung)."""
+"""Tests for Storage (SQLite) and labels (fingerprint + label resolution)."""
 
 import hashlib
 

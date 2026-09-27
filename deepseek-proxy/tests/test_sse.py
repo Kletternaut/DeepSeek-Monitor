@@ -1,7 +1,7 @@
-"""Tests für den inkrementellen SSE-Parser (Anthropic Messages SSE).
+"""Tests for the incremental SSE parser (Anthropic Messages SSE).
 
-Diese Tests dürfen den echten Parser NICHT umgehen — es wird ausschließlich
-:class:`proxy.sse.SSEParser` benutzt und über dessen Callback beobachtet.
+These tests must NOT bypass the real parser — exclusively
+:class:`proxy.sse.SSEParser` is used and observed via its callback.
 """
 
 import json
@@ -12,7 +12,7 @@ from proxy.sse import SSEParser
 
 
 def _feed_collect(chunks, on_event):
-    """Füttert ``chunks`` (bytes) in einen Parser und sammelt Events."""
+    """Feed ``chunks`` (bytes) into a parser and collect events."""
     parser = SSEParser(on_event=on_event)
     for c in chunks:
         parser.feed(c)
@@ -34,7 +34,7 @@ class TestParser:
         assert events == [("message_start", '{"type":"message_start"}')]
 
     def test_event_split_across_chunks(self):
-        """Fall 4: Ein SSE-Event über mehrere HTTP-Chunks verteilt."""
+        """Case 4: an SSE event spread over several HTTP chunks."""
         events = []
         full = b'event: content_block_delta\ndata: {"delta":"hi"}\n\n'
         chunks = [full[:5], full[5:20], full[20:]]
@@ -57,12 +57,12 @@ class TestParser:
         ]
 
     def test_utf8_char_split_across_chunks(self):
-        """Fall 6: UTF-8-Zeichen über mehrere Chunks verteilt."""
+        """Case 6: UTF-8 characters spread over several chunks."""
         events = []
-        # "Grüße" — das "ü" (0xC3 0xBC) wird bewusst an der Chunk-Grenze geteilt.
+        # "Grüße" — the "ü" (0xC3 0xBC) is deliberately split at the chunk boundary.
         text = 'event: message_delta\ndata: {"text":"Grüße"}\n\n'
         raw = text.encode("utf-8")
-        # Grenze mitten in "ü" finden
+        # Find the boundary in the middle of "ü"
         u_pos = raw.index("ü".encode("utf-8"))
         chunks = [raw[:u_pos + 1], raw[u_pos + 1:]]
         _feed_collect(chunks, lambda n, d: events.append((n, d)))
@@ -70,14 +70,14 @@ class TestParser:
         assert 'Grüße' in events[0][1]
 
     def test_bytewise_feed(self):
-        """Härtetest: jedes Byte einzeln füttern."""
+        """Stress test: feed every byte individually."""
         events = []
         payload = b'event: message_stop\ndata: {"type":"message_stop"}\n\n'
         _feed_collect(_chunks_bytewise(payload), lambda n, d: events.append((n, d)))
         assert events == [("message_stop", '{"type":"message_stop"}')]
 
     def test_keep_alive_comment_ignored(self):
-        """Fall 7: `: keep-alive`-Kommentar stört den Parser nicht."""
+        """Case 7: a `: keep-alive` comment does not disturb the parser."""
         events = []
         payload = (
             b': keep-alive\n\n'
@@ -116,7 +116,7 @@ class TestParser:
         events = []
         payload = b'event: message_delta\ndata: {"unfinished"'
         parser = _feed_collect([payload], lambda n, d: events.append((n, d)))
-        assert events == []  # unvollständiges Event wird nicht dispatcht
+        assert events == []  # incomplete event is not dispatched
         # kein Exception — Test erreicht diese Zeile nur, wenn nichts gecrasht ist
 
     def test_callback_error_does_not_crash(self):

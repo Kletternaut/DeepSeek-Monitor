@@ -1,15 +1,15 @@
-"""Leichtgewichtiges Web-Dashboard für echte Usage- und Kosten-Daten.
+"""Lightweight web dashboard for real usage and cost data.
 
-Das Dashboard wird als Teil derselben FastAPI-App betrieben wie der eigentliche
-Proxy. Es liest ausschließlich die **real aufgezeichneten** Usage-Events aus der
-:class:`~proxy.storage.Storage` (Token + daraus berechnete Kosten) -- es werden
-keine Schätzungen aus Guthaben-Deltas verwendet.
+The dashboard runs as part of the same FastAPI app as the actual proxy. It
+reads exclusively the **really recorded** usage events from the
+:class:`~proxy.storage.Storage` (tokens + costs calculated from them) -- no
+estimates from balance deltas are used.
 
-Die Routen werden über :func:`add_dashboard_routes` auf eine übergebene
-FastAPI-App registriert. Es gibt keinen globalen Zustand; die ``Storage``
-wird explizit übergeben und per Closure an die Endpunkte gebunden.
+The routes are registered via :func:`add_dashboard_routes` on a passed FastAPI
+app. There is no global state; the ``Storage`` is passed explicitly and bound
+to the endpoints via closure.
 
-Öffentliche Symbole:
+Public symbols:
     * :func:`add_dashboard_routes`
 """
 
@@ -44,17 +44,17 @@ _BERLIN = ZoneInfo("Europe/Berlin")
 
 # --------------------------------------------------------------------- helper
 def _window_start(days: int) -> str:
-    """ISO-Startzeit ``now - days`` in Europe/Berlin (gleiches Format wie DB)."""
+    """ISO start time ``now - days`` in Europe/Berlin (same format as the DB)."""
     start = datetime.now(_BERLIN) - timedelta(days=max(0, days))
     return start.isoformat(timespec="seconds")
 
 
 def _resolve_fingerprint(storage: Storage, fingerprint: str | None, label: str | None) -> str | None:
-    """Löst ``label`` (falls gegeben) zu einem Fingerprint auf.
+    """Resolve ``label`` (if given) to a fingerprint.
 
-    Ein explizit gesetzter ``fingerprint`` hat immer Vorrang. Ist nur ``label``
-    gesetzt, werden die bekannten Fingerprints durchsucht und der erste
-    Treffer (verglichen über :func:`resolve_label`) zurückgegeben.
+    An explicitly set ``fingerprint`` always takes precedence. If only ``label``
+    is set, the known fingerprints are searched and the first match (compared
+    via :func:`resolve_label`) is returned.
     """
     if fingerprint:
         return fingerprint
@@ -63,12 +63,12 @@ def _resolve_fingerprint(storage: Storage, fingerprint: str | None, label: str |
     for fp in storage.get_distinct_fingerprints():
         if resolve_label(storage, fp) == label:
             return fp
-    logger.debug("Kein Fingerprint zum Label %r gefunden.", label)
+    logger.debug("No fingerprint found for label %r.", label)
     return None
 
 
 def _event_dict(storage: Storage, usage: TokenUsage, pricing: dict) -> dict:
-    """Erzeugt ein JSON-fähiges Dict für ein einzelnes Usage-Event."""
+    """Create a JSON-serializable dict for a single usage event."""
     return {
         "timestamp": usage.timestamp,
         "request_id": usage.request_id,
@@ -88,29 +88,29 @@ def _event_dict(storage: Storage, usage: TokenUsage, pricing: dict) -> dict:
 
 # ----------------------------------------------------------------- request bodies
 class LabelBody(BaseModel):
-    """Body für ``POST /api/labels``."""
+    """Body for ``POST /api/labels``."""
 
     fingerprint: str
     label: str
 
 
 class PricingBody(BaseModel):
-    """Body für ``POST /api/pricing``."""
+    """Body for ``POST /api/pricing``."""
 
     pricing: dict
 
 
 # ----------------------------------------------------------------------- routes
 def add_dashboard_routes(app: FastAPI, storage: Storage) -> None:
-    """Registriert die Dashboard-Routen auf der FastAPI-App ``app``.
+    """Register the dashboard routes on the FastAPI app ``app``.
 
-    Die übergebene ``storage`` wird per Closure an alle Endpunkte gebunden.
-    Die App wird in-place verändert; es gibt keinen globalen Zustand.
+    The passed ``storage`` is bound to all endpoints via closure. The app is
+    mutated in place; there is no global state.
     """
 
     @app.get("/", response_class=HTMLResponse)
     async def dashboard_index() -> HTMLResponse:
-        """Liefert die selbstenthaltene Dashboard-HTML-Seite."""
+        """Return the self-contained dashboard HTML page."""
         return HTMLResponse(content=_DASHBOARD_HTML)
 
     # ------------------------------------------------------------------ usage
@@ -122,7 +122,7 @@ def add_dashboard_routes(app: FastAPI, storage: Storage) -> None:
         end: str | None = Query(default=None),
         limit: int | None = Query(default=None),
     ) -> JSONResponse:
-        """Liefert einzelne Usage-Events, angereichert um Kosten, Tarif, Label."""
+        """Return individual usage events, enriched with cost, tariff, label."""
         pricing = load_pricing(storage)
         fp = _resolve_fingerprint(storage, fingerprint, label)
         rows = storage.get_usage(fingerprint=fp, start=start, end=end, limit=limit)
@@ -136,7 +136,7 @@ def add_dashboard_routes(app: FastAPI, storage: Storage) -> None:
         label: str | None = Query(default=None),
         days: int = Query(default=7),
     ) -> JSONResponse:
-        """Aggregiert Kosten/Token über die letzten ``days`` Tage."""
+        """Aggregate cost/tokens over the last ``days`` days."""
         pricing = load_pricing(storage)
         fp = _resolve_fingerprint(storage, fingerprint, label)
         start = _window_start(days)
@@ -210,7 +210,7 @@ def add_dashboard_routes(app: FastAPI, storage: Storage) -> None:
     # ----------------------------------------------------------------- labels
     @app.get("/api/labels")
     async def api_labels() -> JSONResponse:
-        """Liefert ``[{fingerprint, label}]`` für alle bekannten Fingerprints."""
+        """Return ``[{fingerprint, label}]`` for all known fingerprints."""
         return JSONResponse(
             [
                 {"fingerprint": fp, "label": resolve_label(storage, fp)}
@@ -220,38 +220,38 @@ def add_dashboard_routes(app: FastAPI, storage: Storage) -> None:
 
     @app.post("/api/labels")
     async def api_set_label(body: LabelBody) -> JSONResponse:
-        """Setzt ein manuelles Label für einen Fingerprint."""
+        """Set a manual label for a fingerprint."""
         storage.set_label(body.fingerprint, body.label)
         return JSONResponse({"ok": True})
 
     # ---------------------------------------------------------------- pricing
     @app.get("/api/pricing")
     async def api_get_pricing() -> JSONResponse:
-        """Liefert die aktuell geladene Preis-Tabelle."""
+        """Return the currently loaded price table."""
         return JSONResponse(load_pricing(storage))
 
     @app.post("/api/pricing")
     async def api_set_pricing(body: PricingBody) -> JSONResponse:
-        """Speichert eine manuell übergebene Preis-Tabelle."""
+        """Save a manually passed price table."""
         save_pricing(storage, body.pricing)
         return JSONResponse({"ok": True})
 
     @app.post("/api/pricing/refresh")
     async def api_refresh_pricing() -> JSONResponse:
-        """Lädt die Preise von der DeepSeek-Doku und überschreibt die Tabelle.
+        """Load the prices from the DeepSeek docs and overwrite the table.
 
-        Wichtig: Die clientseitige Bestätigung (``confirm()``) findet in der UI
-        **vor** dem POST statt. Dieser Endpunkt überschreibt bei einem Ergebnis
-        sofort die gespeicherte Tabelle -- es gibt hier keine weitere Rückfrage.
-        Liefert :func:`fetch_latest_pricing` ``None`` (kein sicheres Ergebnis),
-        wird **nicht** überschrieben.
+        Important: the client-side confirmation (``confirm()``) happens in the
+        UI **before** the POST. This endpoint immediately overwrites the stored
+table when a result is available -- there is no further prompt here. If
+        :func:`fetch_latest_pricing` returns ``None`` (no safe result), nothing
+        is overwritten.
         """
         result = fetch_latest_pricing()
         if result is None:
             return JSONResponse(
                 {
                     "ok": False,
-                    "message": "Preise konnten nicht ermittelt werden – Tabelle unverändert.",
+                    "message": "Prices could not be determined – table unchanged.",
                 }
             )
         save_pricing(storage, result)
@@ -260,7 +260,7 @@ def add_dashboard_routes(app: FastAPI, storage: Storage) -> None:
 
 # ------------------------------------------------------------------------- HTML
 _DASHBOARD_HTML = """<!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -315,13 +315,13 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
 <body>
 <header>
   <h1>DeepSeek&nbsp;Proxy&nbsp;Dashboard</h1>
-  <span class="muted" id="status">lade…</span>
+  <span class="muted" id="status">loading…</span>
 </header>
 <main>
   <div class="card">
     <div class="controls">
-      <div><label>Label</label><select id="f-label"><option value="">alle</option></select></div>
-      <div><label>Zeitraum (Tage)</label>
+      <div><label>Label</label><select id="f-label"><option value="">all</option></select></div>
+      <div><label>Period (days)</label>
         <select id="f-days">
           <option value="1">1</option><option value="7" selected>7</option>
           <option value="14">14</option><option value="30">30</option>
@@ -329,9 +329,9 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
         </select>
       </div>
       <div><label>Start (optional)</label><input type="date" id="f-start"></div>
-      <div><label>Ende (optional)</label><input type="date" id="f-end"></div>
-      <div><button id="btn-apply">Anwenden</button></div>
-      <div><button class="ghost" id="btn-refresh-pricing">Preise neu laden</button></div>
+      <div><label>End (optional)</label><input type="date" id="f-end"></div>
+      <div><button id="btn-apply">Apply</button></div>
+      <div><button class="ghost" id="btn-refresh-pricing">Reload prices</button></div>
     </div>
   </div>
 
@@ -343,39 +343,39 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   </div>
 
   <div class="card">
-    <h2>Tagesaufschlüsselung</h2>
-    <div id="daily-wrap"><p class="empty">Keine Daten.</p></div>
+    <h2>Daily breakdown</h2>
+    <div id="daily-wrap"><p class="empty">No data.</p></div>
   </div>
 
   <div class="card">
-    <h2>Aufschlüsselung nach Label</h2>
-    <div id="per-label-wrap"><p class="empty">Keine Daten.</p></div>
+    <h2>Breakdown by label</h2>
+    <div id="per-label-wrap"><p class="empty">No data.</p></div>
   </div>
 
   <div class="card">
-    <h2>Letzte Requests</h2>
-    <div id="events-wrap"><p class="empty">Keine Daten.</p></div>
+    <h2>Latest requests</h2>
+    <div id="events-wrap"><p class="empty">No data.</p></div>
   </div>
 
   <div class="card">
-    <h2>Labels bearbeiten</h2>
-    <div id="labels-wrap"><p class="empty">Keine Fingerprints bekannt.</p></div>
+    <h2>Edit labels</h2>
+    <div id="labels-wrap"><p class="empty">No fingerprints known.</p></div>
   </div>
 </main>
 <div id="toast"></div>
 <script>
 const $ = (id) => document.getElementById(id);
 const fmtUsd = (v) => "$" + Number(v || 0).toFixed(4);
-const fmtInt = (v) => Number(v || 0).toLocaleString("de-DE");
+const fmtInt = (v) => Number(v || 0).toLocaleString("en-US");
 
-// Zeigt den gespeicherten ISO-Timestamp als lokale Zeit ohne Offset an.
-// Die DB speichert bereits Europe/Berlin-Lokalzeit; der Offset wird nur
-// abgeschnitten, es findet keine erneute Umrechnung statt.
+// Show the stored ISO timestamp as local time without offset.
+// The DB already stores Europe/Berlin local time; the offset is only
+// truncated, no re-conversion takes place.
 const fmtTs = (iso) => {
   if (!iso) return "";
   const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
   if (!m) return iso;
-  return `${m[3]}.${m[2]}.${m[1]} ${m[4]}:${m[5]}:${m[6]}`;
+  return `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}`;
 };
 
 function toast(msg, isErr) {
@@ -407,11 +407,11 @@ function kpi(label, value, sub) {
 
 function renderSummary(s) {
   $("kpis").innerHTML =
-    kpi("Gesamtkosten", fmtUsd(s.total_cost), fmtInt(s.requests) + " Requests") +
-    kpi("Input-Token", fmtInt(s.total_input_tokens)) +
-    kpi("Output-Token", fmtInt(s.total_output_tokens)) +
-    kpi("Cache-Read-Token", fmtInt(s.total_cache_read_tokens)) +
-    kpi("Cache-Creation-Token", fmtInt(s.total_cache_creation_tokens));
+    kpi("Total cost", fmtUsd(s.total_cost), fmtInt(s.requests) + " Requests") +
+    kpi("Input tokens", fmtInt(s.total_input_tokens)) +
+    kpi("Output tokens", fmtInt(s.total_output_tokens)) +
+    kpi("Cache read tokens", fmtInt(s.total_cache_read_tokens)) +
+    kpi("Cache creation tokens", fmtInt(s.total_cache_creation_tokens));
 
   $("tariff-cards").innerHTML =
     kpi("Peak", fmtUsd(s.peak.cost), fmtInt(s.peak.requests) + " Requests") +
@@ -419,10 +419,10 @@ function renderSummary(s) {
 
   const d = s.daily || [];
   if (!d.length) {
-    $("daily-wrap").innerHTML = '<p class="empty">Keine Daten.</p>';
+    $("daily-wrap").innerHTML = '<p class="empty">No data.</p>';
   } else {
     $("daily-wrap").innerHTML = `<table><thead><tr>
-      <th>Datum</th><th class="num">Kosten</th><th class="num">Input</th>
+      <th>Date</th><th class="num">Cost</th><th class="num">Input</th>
       <th class="num">Output</th><th class="num">Requests</th></tr></thead><tbody>` +
       d.map(r => `<tr><td>${r.date}</td><td class="num">${fmtUsd(r.cost)}</td>
         <td class="num">${fmtInt(r.input_tokens)}</td>
@@ -434,10 +434,10 @@ function renderSummary(s) {
   const pl = s.per_label || {};
   const keys = Object.keys(pl).sort();
   if (!keys.length) {
-    $("per-label-wrap").innerHTML = '<p class="empty">Keine Daten.</p>';
+    $("per-label-wrap").innerHTML = '<p class="empty">No data.</p>';
   } else {
     $("per-label-wrap").innerHTML = `<table><thead><tr>
-      <th>Label</th><th class="num">Kosten</th><th class="num">Input</th>
+      <th>Label</th><th class="num">Cost</th><th class="num">Input</th>
       <th class="num">Output</th><th class="num">Requests</th></tr></thead><tbody>` +
       keys.map(k => `<tr><td>${k}</td><td class="num">${fmtUsd(pl[k].cost)}</td>
         <td class="num">${fmtInt(pl[k].input_tokens)}</td>
@@ -449,20 +449,20 @@ function renderSummary(s) {
   const sel = $("f-label");
   const cur = sel.value;
   const labels = s.labels || [];
-  sel.innerHTML = '<option value="">alle</option>' +
+  sel.innerHTML = '<option value="">all</option>' +
     labels.map(l => `<option value="${l}">${l}</option>`).join("");
   sel.value = cur;
 }
 
 function renderEvents(events) {
   if (!events.length) {
-    $("events-wrap").innerHTML = '<p class="empty">Keine Daten.</p>';
+    $("events-wrap").innerHTML = '<p class="empty">No data.</p>';
     return;
   }
   $("events-wrap").innerHTML = `<table><thead><tr>
-    <th>Zeit</th><th>Label</th><th>Modell</th><th>Tarif</th>
+    <th>Time</th><th>Label</th><th>Model</th><th>Tariff</th>
     <th class="num">In</th><th class="num">Out</th><th class="num">Cache R</th>
-    <th class="num">Cache W</th><th class="num">Kosten</th></tr></thead><tbody>` +
+    <th class="num">Cache W</th><th class="num">Cost</th></tr></thead><tbody>` +
     events.map(e => `<tr>
       <td>${fmtTs(e.timestamp)}</td><td>${e.label}</td><td>${e.model}</td>
       <td><span class="pill ${e.tariff}">${e.tariff}</span></td>
@@ -476,17 +476,17 @@ function renderEvents(events) {
 
 function renderLabels(items) {
   if (!items.length) {
-    $("labels-wrap").innerHTML = '<p class="empty">Keine Fingerprints bekannt.</p>';
+    $("labels-wrap").innerHTML = '<p class="empty">No fingerprints known.</p>';
     return;
   }
   $("labels-wrap").innerHTML = `<table><thead><tr>
-    <th>Fingerprint</th><th>Aktuelles Label</th><th>Neues Label</th><th></th>
+    <th>Fingerprint</th><th>Current label</th><th>New label</th><th></th>
     </tr></thead><tbody>` +
     items.map(it => `<tr>
       <td class="fp">${it.fingerprint.slice(0, 16)}…</td>
       <td>${it.label}</td>
       <td><input data-fp="${it.fingerprint}" value="${it.label}"></td>
-      <td class="row-actions"><button class="ghost" data-save="${it.fingerprint}">Speichern</button></td>
+      <td class="row-actions"><button class="ghost" data-save="${it.fingerprint}">Save</button></td>
     </tr>`).join("") + `</tbody></table>`;
 
   document.querySelectorAll("button[data-save]").forEach(btn => {
@@ -499,9 +499,9 @@ function renderLabels(items) {
           body: JSON.stringify({fingerprint: fp, label: input.value}),
         });
         if (!r.ok) throw new Error("HTTP " + r.status);
-        toast("Label gespeichert.");
+        toast("Label saved.");
         await reload();
-      } catch (err) { toast("Fehler: " + err.message, true); }
+      } catch (err) { toast("Error: " + err.message, true); }
     });
   });
 }
@@ -526,27 +526,27 @@ async function reload() {
     renderLabels(l || []);
 
     $("status").textContent =
-      "Stand: " + new Date().toLocaleTimeString("de-DE") +
-      " · " + fmtInt(s.requests) + " Requests im Zeitraum";
+      "As of: " + new Date().toLocaleTimeString("en-US") +
+      " · " + fmtInt(s.requests) + " requests in period";
   } catch (err) {
-    $("status").textContent = "Fehler beim Laden";
-    toast("Fehler: " + err.message, true);
+    $("status").textContent = "Error loading";
+    toast("Error: " + err.message, true);
   }
 }
 
 $("btn-apply").addEventListener("click", reload);
 
 $("btn-refresh-pricing").addEventListener("click", async () => {
-  if (!confirm("Preis-Tabelle wirklich von der DeepSeek-Doku neu laden und überschreiben?")) return;
+  if (!confirm("Really reload and overwrite the price table from the DeepSeek docs?")) return;
   const btn = $("btn-refresh-pricing");
   btn.disabled = true;
   try {
     const r = await fetch("/api/pricing/refresh", {method: "POST"});
     const data = await r.json();
-    if (data.ok) toast("Preise aktualisiert: " + JSON.stringify(data.pricing));
-    else toast(data.message || "Preise konnten nicht geladen werden.", true);
+    if (data.ok) toast("Prices updated: " + JSON.stringify(data.pricing));
+    else toast(data.message || "Prices could not be loaded.", true);
   } catch (err) {
-    toast("Fehler: " + err.message, true);
+    toast("Error: " + err.message, true);
   } finally {
     btn.disabled = false;
   }
