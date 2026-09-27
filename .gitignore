@@ -2,3 +2,10 @@
 __pycache__/
 *.pyc
 .env
+influx.env
+.venv/
+.pytest_cache/
+
+# GROSS geschriebene Ordner werden nie gepusht
+BACKUP/
+DEVELOPMENT/

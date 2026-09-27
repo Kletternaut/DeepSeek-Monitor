@@ -1,0 +1,4 @@
+{
+  "org": "Jolly",
+  "flux": "option task = {name: \"downsample_usage_daily\", every: 1d, offset: 5m}\n\nfrom(bucket: \"deepseek-usage\")\n  |> range(start: -task.every)\n  |> filter(fn: (r) => r._measurement == \"usage\")\n  |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)\n  |> set(key: \"_measurement\", value: \"usage_daily\")\n  |> to(bucket: \"deepseek-usage-daily\", org: \"Jolly\")"
+}

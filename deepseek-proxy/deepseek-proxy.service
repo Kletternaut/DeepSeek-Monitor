@@ -1,0 +1,34 @@
+# systemd-System-Unit für den DeepSeek-Anthropic-Proxy.
+#
+# Installation (als root bzw. mit sudo):
+#   sudo cp /home/admin/deepseek/deepseek-proxy/deepseek-proxy.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now deepseek-proxy
+#
+# Status / Logs:
+#   systemctl status deepseek-proxy
+#   journalctl -u deepseek-proxy -f
+#
+# Deaktivieren:
+#   sudo systemctl disable --now deepseek-proxy
+
+[Unit]
+Description=DeepSeek Anthropic Messages Streaming-Proxy mit Usage-Monitoring
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=admin
+Group=admin
+WorkingDirectory=/home/admin/deepseek/deepseek-proxy
+ExecStart=/home/admin/deepseek/deepseek-proxy/.venv/bin/python /home/admin/deepseek/deepseek-proxy/main.py
+Environment=PYTHONUNBUFFERED=1
+# Optionale InfluxDB-Konfiguration (DEEPSEEK_INFLUX_*) -- Datei liegt mit 0600
+# berechtigt neben der Unit und enthält das Token (nicht committen).
+EnvironmentFile=-/home/admin/deepseek/deepseek-proxy/influx.env
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
