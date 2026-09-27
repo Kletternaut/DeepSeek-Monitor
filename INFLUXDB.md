@@ -152,21 +152,7 @@ Im InfluxDB-Modus erscheint im Fenster „Kosten & Verbrauch" ein **Host-Dropdow
 
 ---
 
-## 6. Downsampling (tägliche Aggregation, optional)
-
-Ein Flux-Task aggregiert täglich die Rohdaten in einen Aggregat-Bucket.
-
-Kurzfassung:
-- Rohdaten-Bucket: Retention **90 Tage**.
-- Aggregat-Bucket (Measurement `usage_daily`): Retention **unendlich**.
-- Ein Task aggregiert täglich `usage` → `usage_daily` (Summen je Host/Modell/Zone/Tag).
-
-Die Einrichtung erfolgt **manuell per SSH** (Passwort bleibt beim User); das
-Flux-Skript und die Anleitung liegen bereit.
-
----
-
-## 7. Wichtige Dateien (Übersicht)
+## 6. Wichtige Dateien (Übersicht)
 
 | Datei | Zweck |
 |---|---|
@@ -183,7 +169,7 @@ Flux-Skript und die Anleitung liegen bereit.
 
 ---
 
-## 8. Sicherheit
+## 7. Sicherheit
 
 - Das Influx-**Token** liegt **nur** in `influx.env` (Proxy) bzw. `influx_config`
   (App), beide mit Rechten `0600` und per `.gitignore` ausgeschlossen.
@@ -193,7 +179,7 @@ Flux-Skript und die Anleitung liegen bereit.
 
 ---
 
-## 9. Betrieb / Verifikation
+## 8. Betrieb / Verifikation
 
 1. Proxy läuft: `systemctl is-active deepseek-proxy` → `active`.
 2. Influx-Sink aktiv: `journalctl -u deepseek-proxy | grep "InfluxDB-Sink"`.
