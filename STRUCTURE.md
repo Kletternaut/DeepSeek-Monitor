@@ -13,7 +13,7 @@ Dieses Repository bündelt zwei Komponenten zur Überwachung der DeepSeek-API-Nu
 
 ```
 .
-├── README.md                    # Einstieg: Überblick, Schnellinstallation, Display-Fix (xrdp), VS-Code-Setup
+├── README.md                    # Einstieg: Überblick, Schnellinstallation, VS-Code-Setup
 ├── INSTALLATION.md              # Schritt-für-Schritt-Anleitung: Installation auf zusätzlichen Hosts
 ├── INFLUXDB.md                  # InfluxDB-2.x-Integration: Architektur, Schreib-/Lesepfad, Downsampling
 ├── STRUCTURE.md                 # Diese Datei: Verzeichnis-/Datei-Referenz

@@ -1,206 +1,83 @@
-# Installation auf zusätzlichen Hosts — Anleitung
+# Installation
 
-> Stand: 2026-09-27 · Multi-Host-Deployment von Proxy + Monitor
+Voraussetzungen:
 
-Diese Anleitung beschreibt, wie **Proxy** (`deepseek-proxy/`) und **Monitor**
-(`deepseek_rates_latest.py`) auf einem neuen Host installiert werden. Als
-Verteilweg dient **GitHub** (Repository `Kletternaut/DeepSeek-Monitor`, Branch
-`main`) — kein `rsync`/`scp`.
+- Python 3.10+ (mit `venv` und `tkinter`)
+- `git`
 
-Die zentrale InfluxDB wird über die Umgebungsvariablen `DEEPSEEK_INFLUX_*`
-konfiguriert (URL, Token, Organisation, Bucket).
-
----
-
-## 1. Voraussetzungen
-
-- SSH-Zugang als `<user>` (Passwort bleibt beim User).
-- Auf dem Zielhost: Python 3.10+ mit `venv` und `tkinter`, `git`, systemd.
-  Prüfen:
-
-  ```bash
-  python3 --version
-  python3 -m venv --help >/dev/null && echo "venv OK"
-  python3 -c "import tkinter; print('tkinter OK')"
-  which git
-  ```
-
-- **Achtung pyenv:** Auf einigen Hosts zeigt `python3` auf einen
-  **pyenv-Shim** (`~/.pyenv/shims/python3`). Das funktioniert im
-  Terminal, kann aber im Desktop-Kontext Probleme machen (siehe Abschnitt 3).
-
----
-
-## 2. Installation
-
-### 2.1 Altes Verzeichnis sichern + frisch klonen
+## 1. Repository klonen
 
 ```bash
-cd ~
-if [ -d deepseek ] && [ ! -d deepseek/.git ]; then
-    mv deepseek deepseek.old-$(date +%Y%m%d%H%M%S)
-fi
-git clone --branch main https://github.com/Kletternaut/DeepSeek-Monitor.git deepseek
+git clone --branch main https://github.com/Kletternaut/DeepSeek-Monitor.git
+cd DeepSeek-Monitor
 ```
 
-### 2.2 Proxy: venv + Abhängigkeiten
+## 2. Proxy installieren
 
 ```bash
-cd ~/deepseek/deepseek-proxy
+cd deepseek-proxy
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python -c "import fastapi, uvicorn, httpx, influxdb_client; print('Proxy-Deps OK')"
 ```
 
-### 2.3 Proxy: `influx.env` anlegen (Secret, 0600)
+### InfluxDB (optional)
 
-`influx.env` ist per `.gitignore` ausgeschlossen und wird **nicht** über GitHub
-verteilt — auf jedem Host manuell anlegen:
+Damit der Proxy die Usage zusätzlich in eine zentrale InfluxDB 2.x schreibt,
+eine Datei `influx.env` anlegen (Rechte `0600`, wird **nicht** committet):
 
-```bash
-cd ~/deepseek/deepseek-proxy
-umask 077
-cat > influx.env <<'EOF'
+```ini
 DEEPSEEK_INFLUX_URL=http://<INFLUX_HOST>:8086
 DEEPSEEK_INFLUX_TOKEN=<TOKEN>
 DEEPSEEK_INFLUX_ORG=<ORG>
 DEEPSEEK_INFLUX_BUCKET=<BUCKET>
-EOF
-chmod 600 influx.env
+# optional:
+# DEEPSEEK_INFLUX_HOST_NAME=<hostname>
 ```
 
-Optional `DEEPSEEK_INFLUX_HOST_NAME=<hostname>` setzen, sonst wird
-`socket.gethostname()` verwendet.
+Ohne diese Datei schreibt der Proxy nur lokal in SQLite.
 
-### 2.4 Proxy: systemd-Service aktivieren
+### systemd-Service aktivieren
 
 ```bash
-cd ~/deepseek/deepseek-proxy
 sudo cp deepseek-proxy.service /etc/systemd/system/deepseek-proxy.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now deepseek-proxy
+```
+
+Prüfen:
+
+```bash
 systemctl is-active deepseek-proxy          # → active
 curl -s -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:8000/   # → HTTP 200
 ```
 
-Verifikation des Influx-Sinks:
+## 3. Proxy starten (ohne systemd, alternativ)
 
 ```bash
-journalctl -u deepseek-proxy -n 20 | grep "InfluxDB-Sink"
+cd deepseek-proxy
+.venv/bin/python main.py
 ```
 
-### 2.5 VS Code: Custom Endpoint auf lokalen Proxy umbiegen
+Optionen: `--host`, `--port`, `--upstream`, `--db`, `--no-dashboard`, `--view`
+sowie die InfluxDB-Flags `--influx-url/--influx-token/--influx-org/--influx-bucket/--host-name`.
+Siehe `deepseek-proxy/README.md`.
 
-Datei `~/.config/Code/User/chatLanguageModels.json` bearbeiten. Das **Secret**
-(`${input:chat.lm.secret.*}`) **unverändert lassen**, nur die Modell-URLs vom
-DeepSeek-Direkt-Endpoint auf den lokalen Proxy umbiegen:
+## 4. Monitor starten
 
 ```bash
-cd ~/.config/Code/User
-cp chatLanguageModels.json chatLanguageModels.json.bak-$(date +%Y%m%d%H%M%S)
-sed -i 's|https://api.deepseek.com/anthropic|http://127.0.0.1:8000/anthropic|g' chatLanguageModels.json
+python3 deepseek_rates_latest.py
 ```
 
-> Jeder Host hat sein **eigenes Secret** — nicht von einem anderen Host
-> übernehmen. VS Code nach der Änderung neu laden.
+Die Datenquelle (lokaler Proxy/SQLite vs. zentrale InfluxDB) wird in den
+GUI-Einstellungen unter „Datenquelle" gewählt.
 
-### 2.6 Monitor: Desktop-Entry anlegen
+## 5. VS Code einrichten (Custom Endpoint)
 
-```bash
-mkdir -p ~/.local/share/applications
-cat > ~/.local/share/applications/deepseek-monitor.desktop <<'EOF'
-[Desktop Entry]
-Version=1.5
-Type=Application
-Name=DeepSeek Monitor
-Comment=DeepSeek API Kosten- & Verbrauchs-Monitor
-Icon=$HOME/deepseek/deepseek_logo.png
-Exec=env DISPLAY=:10.0 python3 $HOME/deepseek/deepseek_rates_latest.py
-Terminal=false
-Categories=Utility;
-EOF
-chmod +x ~/.local/share/applications/deepseek-monitor.desktop
-```
-
-### 2.7 Monitor: bestehendes Desktop-Icon aktualisieren
-
-Achtung: Auf bereits eingerichteten Hosts liegt oft noch ein **altes Icon auf dem
-Schreibtisch** (`~/Desktop/deepseek.desktop`), das auf die alte Datei
-`deepseek_rates.py` und das alte SVG-Icon zeigt. Diese Dateien existieren nach
-dem Clone/Aufräumen **nicht mehr** → das Icon tut nichts. Dieses Icon ist das,
-was der User tatsächlich anklickt (nicht der Menü-Eintrag aus 2.6).
-
-```bash
-cp ~/Desktop/deepseek.desktop ~/Desktop/deepseek.desktop.bak-$(date +%Y%m%d%H%M%S)
-cat > ~/Desktop/deepseek.desktop <<'EOF'
-[Desktop Entry]
-Version=1.5
-Type=Application
-Name=DeepSeek
-Comment=DeepSeek API Kosten- & Verbrauchs-Monitor
-Icon=$HOME/deepseek/deepseek_logo.png
-Exec=env DISPLAY=:10.0 python3 $HOME/deepseek/deepseek_rates_latest.py
-Terminal=false
-Categories=Utility;
-EOF
-chmod +x ~/Desktop/deepseek.desktop
-```
-
-Referenzen prüfen (müssen existieren):
-
-```bash
-ls -la ~/deepseek/deepseek_rates_latest.py   # Symlink -> v2.4.0
-ls -la ~/deepseek/deepseek_logo.png
-```
+Damit VS Code über den lokalen Proxy läuft, in
+`~/.config/Code/User/chatLanguageModels.json` die Modell-URL auf
+`http://127.0.0.1:8000/anthropic` setzen (Secret unverändert lassen). Ein
+vollständiges Beispiel steht im [`README.md`](README.md).
 
 ---
 
-## 3. WICHTIG: `DISPLAY` beim Desktop-Start (xrdp)
-
-Der Monitor ist eine Tkinter-App und braucht ein gültiges `$DISPLAY`. Auf den
-Raspberry-Pi-Hosts läuft der Desktop jedoch über **xrdp auf Display `:10`**
-(`Xorg :10`), nicht auf dem Standard-Display `:0`. Im Desktop-Startkontext ist
-`$DISPLAY` deshalb **leer** → der Monitor bricht mit „no display name" ab und
-das Icon scheint „nichts zu tun".
-
-**Fix:** Im Desktop-Entry `Exec` mit `env DISPLAY=:10.0` starten (siehe 2.6).
-
-Prüfen, welches Display aktiv ist:
-
-```bash
-ps aux | grep -E "Xorg|Xvnc|Xvfb" | grep -v grep
-ls -la /tmp/.X11-unix/     # vorhandene X-Sockets, z. B. X0, X10
-```
-
-Schnelltest des Monitors (startet 5 s, dann Timeout):
-
-```bash
-DISPLAY=:10.0 timeout 5 python3 ~/deepseek/deepseek_rates_latest.py
-```
-
-Läuft er ohne Fehlermeldung, ist der Display-Wert korrekt.
-
----
-
-## 4. Abschluss / Verifikation
-
-1. Proxy: `systemctl is-active deepseek-proxy` → `active`.
-2. Influx-Sink: `journalctl -u deepseek-proxy | grep "InfluxDB-Sink"` →
-   zeigt URL + `host=<hostname>`.
-3. Monitor: Desktop-Icon anklicken → Fenster öffnet sich.
-4. VS Code neu laden → Modell-Requests laufen über `127.0.0.1:8000`.
-5. Datenfluss prüfen: Im Monitor „Kosten & Verbrauch" mit Datenquelle
-   „InfluxDB (zentral)" → Events aus allen Hosts sichtbar (Host-Filter).
-
----
-
-## 5. Troubleshooting
-
-| Symptom | Ursache | Lösung |
-|---|---|---|
-| Icon startet nichts | `$DISPLAY` fehlt (xrdp) | `env DISPLAY=:10.0` in `Exec` (Abschnitt 3) |
-| Icon startet nichts (trotz `DISPLAY`) | altes Desktop-Icon zeigt auf tote Dateien (`deepseek_rates.py`, `DeepSeek.svg` nach Clone/Aufräumen weg) | Icon auf `deepseek_rates_latest.py` + `deepseek_logo.png` umbiegen (Abschnitt 2.7) |
-| `python3` nicht gefunden im Desktop | pyenv-Shim nicht initialisiert | `python3` durch `/usr/bin/python3` ersetzen oder Login-Shell nutzen |
-| Proxy läuft, aber keine Influx-Daten | `influx.env` fehlt / falsch | Datei prüfen, `chmod 600`, `systemctl restart deepseek-proxy` |
-| VS Code nutzt noch Direkt-Endpoint | Config gecacht | VS Code neu laden, `chatLanguageModels.json` prüfen |
-| Token in Log sichtbar | — | Token auf der InfluxDB rotieren (Secret-Hygiene) |
+Weitere Details: [`README.md`](README.md) · [`INFLUXDB.md`](INFLUXDB.md) · [`STRUCTURE.md`](STRUCTURE.md)
