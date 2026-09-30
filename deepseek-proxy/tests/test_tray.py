@@ -44,3 +44,10 @@ def test_app_version_returns_nonempty_string() -> None:
     version = tray._app_version()
     assert isinstance(version, str)
     assert version.strip()
+
+
+def test_influx_dialog_module_imports_and_exposes_callable() -> None:
+    # The dialog module must import without a display and expose the function.
+    from proxy import influx_dialog
+
+    assert callable(influx_dialog.open_influx_dialog)

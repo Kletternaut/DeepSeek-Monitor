@@ -117,6 +117,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _load_shared_influx_config() -> dict[str, str]:
+    """Load the shared InfluxDB config (the same file the monitor writes).
+
+    The monitor persists its data-source settings as JSON (url/token/org/bucket)
+    in the platform config dir. The proxy reads this as a fallback so both
+    components can share a single configuration.
+    """
+    try:
+        from deepseek_monitor.persistence import load_influx_config
+
+        cfg = load_influx_config()
+        if cfg and cfg.get("url"):
+            return cfg
+    except Exception:  # pragma: no cover - optional cross-package import
+        logger.debug("Shared InfluxDB config unavailable", exc_info=True)
+    return {}
+
+
 def _build_usage_callback(args: argparse.Namespace, storage: Storage):
     """Build the ``usage_callback`` including the optional InfluxDB sink.
 
@@ -130,6 +148,14 @@ def _build_usage_callback(args: argparse.Namespace, storage: Storage):
     influx_org = args.influx_org or os.environ.get("DEEPSEEK_INFLUX_ORG")
     influx_bucket = args.influx_bucket or os.environ.get("DEEPSEEK_INFLUX_BUCKET")
     host_name = args.host_name or os.environ.get("DEEPSEEK_INFLUX_HOST_NAME")
+
+    # Fallback: shared config file (written by the monitor/tray dialog).
+    if not influx_url:
+        shared = _load_shared_influx_config()
+        influx_url = shared.get("url", "")
+        influx_token = influx_token or shared.get("token", "")
+        influx_org = influx_org or shared.get("org", "")
+        influx_bucket = influx_bucket or shared.get("bucket", "")
 
     if not influx_url:
         return storage.save_usage
@@ -162,6 +188,23 @@ def _build_usage_callback(args: argparse.Namespace, storage: Storage):
     return combined_callback
 
 
+def _build_server(args: argparse.Namespace, storage: Storage) -> DeepSeekProxyServer:
+    """Create and configure a proxy server from ``args`` (not yet started)."""
+    usage_callback = _build_usage_callback(args, storage)
+    server = DeepSeekProxyServer(
+        usage_callback=usage_callback,
+        host=args.host,
+        port=args.port,
+        upstream_url=args.upstream,
+    )
+    if not args.no_dashboard:
+        add_dashboard_routes(server.app, storage)
+        logger.info("Dashboard enabled at %s/", server.base_url)
+    else:
+        logger.info("Dashboard disabled (--no-dashboard)")
+    return server
+
+
 def main(argv: list[str] | None = None) -> int:
     """Start the proxy and wait until a termination signal arrives."""
     args = parse_args(argv)
@@ -183,20 +226,7 @@ def main(argv: list[str] | None = None) -> int:
         UsageDetailApp(storage).run()
         return 0
 
-    usage_callback = _build_usage_callback(args, storage)
-
-    server = DeepSeekProxyServer(
-        usage_callback=usage_callback,
-        host=args.host,
-        port=args.port,
-        upstream_url=args.upstream,
-    )
-
-    if not args.no_dashboard:
-        add_dashboard_routes(server.app, storage)
-        logger.info("Dashboard enabled at %s/", server.base_url)
-    else:
-        logger.info("Dashboard disabled (--no-dashboard)")
+    server = _build_server(args, storage)
 
     stop_event = threading.Event()
 
@@ -221,6 +251,50 @@ def main(argv: list[str] | None = None) -> int:
     server.start()
     logger.info("Proxy ready at %s", server.base_url)
 
+    # A tray "configure" request is raised from the tray thread; the actual
+    # dialog + restart run in this (main) thread, which is required for Tkinter.
+    configure_event = threading.Event()
+
+    def _configure_influx() -> None:
+        """Open the InfluxDB dialog, persist, and restart the server."""
+        nonlocal server
+
+        from proxy.influx_dialog import open_influx_dialog
+
+        try:
+            from deepseek_monitor.persistence import (
+                load_influx_config,
+                save_influx_config,
+            )
+
+            current = load_influx_config() or {}
+        except Exception:  # pragma: no cover - optional cross-package import
+            current = {}
+
+        result = open_influx_dialog(current)
+        if not result:
+            logger.info("InfluxDB configuration cancelled.")
+            return
+
+        try:
+            save_influx_config(
+                {
+                    "url": result.get("url", ""),
+                    "token": result.get("token", ""),
+                    "org": result.get("org", ""),
+                    "bucket": result.get("bucket", ""),
+                }
+            )
+        except Exception:  # pragma: no cover - defensive
+            logger.exception("Could not persist InfluxDB configuration")
+
+        # Restart so the new Influx config takes effect (sink is built at start).
+        logger.info("Restarting proxy to apply InfluxDB configuration ...")
+        server.stop()
+        server = _build_server(args, storage)
+        server.start()
+        logger.info("Proxy ready at %s", server.base_url)
+
     # System-tray icon (opt-in, Windows only, lazy pystray+Pillow import).
     if args.tray:
         from proxy.tray import start_tray, tray_supported
@@ -230,6 +304,7 @@ def main(argv: list[str] | None = None) -> int:
                 port=args.port,
                 base_url=server.base_url,
                 stop_event=stop_event,
+                on_configure=configure_event.set,
             )
         else:
             logger.info("--tray requested but unsupported on this platform; ignored.")
@@ -241,6 +316,12 @@ def main(argv: list[str] | None = None) -> int:
         # would never run. A short timeout returns periodically and lets the
         # interpreter process the pending signal (which sets ``stop_event``).
         while not stop_event.is_set():
+            if configure_event.is_set():
+                configure_event.clear()
+                try:
+                    _configure_influx()
+                except Exception:  # pragma: no cover - defensive
+                    logger.exception("InfluxDB configuration failed")
             stop_event.wait(timeout=0.5)
     finally:
         server.stop()

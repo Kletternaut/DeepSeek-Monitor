@@ -92,6 +92,7 @@ def start_tray(
     port: int,
     base_url: str,
     stop_event: threading.Event,
+    on_configure: object | None = None,
 ) -> threading.Thread | None:
     """Start the tray icon in a background thread (Windows only).
 
@@ -99,6 +100,9 @@ def start_tray(
         port: Proxy port, shown in the menu.
         base_url: Base URL of the running proxy (``http://host:port``).
         stop_event: Shared stop event; set when the user chooses "Beenden".
+        on_configure: Optional zero-arg callable invoked when the user chooses
+            "InfluxDB konfigurieren…". It runs in the tray thread, so it should
+            only set a flag/event (the actual dialog runs elsewhere).
 
     Returns:
         The started thread, or ``None`` if the tray could not be created
@@ -117,7 +121,7 @@ def start_tray(
 
     version_text = _app_version()
 
-    menu = pystray.Menu(
+    menu_items: list = [
         pystray.MenuItem(f"Port {port}", None, enabled=False),
         pystray.MenuItem(f"Version {version_text}", None, enabled=False),
         pystray.Menu.SEPARATOR,
@@ -129,12 +133,26 @@ def start_tray(
             "GitHub",
             lambda icon, item: _open_url(GITHUB_URL),
         ),
-        pystray.Menu.SEPARATOR,
+    ]
+
+    if on_configure is not None:
+        menu_items.append(pystray.Menu.SEPARATOR)
+        menu_items.append(
+            pystray.MenuItem(
+                "InfluxDB konfigurieren…",
+                lambda icon, item: on_configure(),
+            )
+        )
+
+    menu_items.append(pystray.Menu.SEPARATOR)
+    menu_items.append(
         pystray.MenuItem(
             "Beenden",
             lambda icon, item: _on_quit(icon, stop_event),
-        ),
+        )
     )
+
+    menu = pystray.Menu(*menu_items)
 
     icon = pystray.Icon(
         "deepseek-proxy",
