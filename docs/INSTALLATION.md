@@ -95,11 +95,6 @@ To use one:
    with your absolute installation path (the directory created by `git clone`,
    e.g. `/home/alice/DeepSeek-Monitor`). Desktop entries do **not** expand shell
    variables like `$HOME`, so an absolute path is required.
-3. (Optional) If the desktop environment does not trust the file yet, mark it
-   executable:
-   ```bash
-   chmod +x ~/.local/share/applications/deepseek-monitor.desktop
-   ```
 
 The icon files referenced by `Icon=` (`assets/deepseek-monitor-256.png` and
 `assets/deepseek-proxy-256.png`) are already part of the repository, so no

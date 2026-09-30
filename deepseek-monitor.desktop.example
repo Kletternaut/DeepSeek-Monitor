@@ -20,8 +20,8 @@ Keywords=DeepSeek;Monitor;Cost;Usage;Tkinter;
 #      is usually enough (no virtualenv required).
 #   3. Copy this file to ~/.local/share/applications/deepseek-monitor.desktop
 #      (or /usr/share/applications/ for all users).
-#   4. Make it executable if you placed it on your desktop:
-#        chmod +x deepseek-monitor.desktop
+#
+# A desktop entry does NOT need the executable bit.
 #
 # The monitor is a GUI app (Terminal=false); it shows the tariff widget,
 # the "Cost & Usage" window and the settings. It reads usage from the local
