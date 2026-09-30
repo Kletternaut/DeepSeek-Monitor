@@ -1432,7 +1432,7 @@ class _LegacyDeepSeekFiligreeGUI:
             if not api_key:
                 self._set_balance_error(
                     "No API key: set DEEPSEEK_API_KEY "
-                    "or create ~/.config/deepseek/api_key"
+                    f"or create {API_KEY_FILE}"
                 )
                 return
 

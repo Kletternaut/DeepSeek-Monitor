@@ -155,4 +155,73 @@ After the change, reload VS Code (Reload Window).
 
 ---
 
+## Windows (Win11 / 25H2)
+
+The monitor and proxy are cross-platform. On Windows the application data is
+stored in the native locations instead of the XDG directories:
+
+| Purpose | Linux | Windows |
+|---|---|---|
+| Config / API key | `~/.config/deepseek/` | `%APPDATA%\deepseek\` |
+| State / SQLite DB | `~/.local/state/deepseek/` | `%LOCALAPPDATA%\deepseek\` |
+
+The API key is therefore read from `%APPDATA%\deepseek\api_key` on Windows
+(the monitor and proxy share the same file, exactly as on Linux).
+
+### A. Build standalone .exe files (PyInstaller)
+
+Prerequisites:
+
+- Python 3.11 or 3.12 from <https://www.python.org/downloads/> — tick
+  **"Add python.exe to PATH"**; the **tcl/tk** option must be installed
+  (enabled by default), because the monitor is a Tkinter app.
+- The repository checked out (see section 1).
+
+Build (PowerShell):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging\build-windows.ps1
+```
+
+This produces `dist\DeepSeek-Monitor.exe` (GUI) and `dist\DeepSeek-Proxy.exe`
+(server + web dashboard). `tzdata` is bundled so `zoneinfo` works without a
+system timezone database.
+
+### B. Start the proxy
+
+```powershell
+# simple (server + dashboard on port 8000):
+.\dist\DeepSeek-Proxy.exe
+
+# or via the wrapper that also loads influx.env:
+powershell -ExecutionPolicy Bypass -File packaging\start-proxy.ps1 --port 8000
+```
+
+The web dashboard is available at <http://127.0.0.1:8000/>.
+
+### C. Run the proxy as a scheduled task (autostart, optional)
+
+```powershell
+# start at LOGON of the current user (API key readable from %APPDATA%):
+powershell -ExecutionPolicy Bypass -File packaging\install-proxy-service.ps1
+
+# or start at BOOT as SYSTEM (then set DEEPSEEK_API_KEY manually):
+powershell -ExecutionPolicy Bypass -File packaging\install-proxy-service.ps1 -AtStartup
+
+# remove again:
+Unregister-ScheduledTask -TaskName "DeepSeek-Proxy" -Confirm:$false
+```
+
+### D. Start the monitor
+
+Double-click `dist\DeepSeek-Monitor.exe` (or create a shortcut to it). The
+monitor has no autostart by default; start it manually.
+
+### E. Configure VS Code on Windows
+
+The `chatLanguageModels.json` entry is identical to section 6 above — the proxy
+still listens on `http://127.0.0.1:8000/anthropic`.
+
+---
+
 Weitere Details: [`README.md`](README.md) · [`INFLUXDB.md`](INFLUXDB.md) · [`STRUCTURE.md`](STRUCTURE.md)

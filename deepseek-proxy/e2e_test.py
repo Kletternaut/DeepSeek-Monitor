@@ -11,11 +11,19 @@ import json
 import os
 import sqlite3
 import sys
+import tempfile
 import urllib.request
 
-KEY_FILE = os.path.expanduser("~/.config/deepseek/api_key")
+# Make the proxy modules importable (script lives in the project root).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from proxy.paths import API_KEY_FILE  # noqa: E402
+
+KEY_FILE = API_KEY_FILE
 PROXY_URL = "http://127.0.0.1:18999/anthropic/v1/messages"
-DB_PATH = "/tmp/ds_e2e.db"
+# Deterministic temp path (works on Linux and Windows, unlike /tmp/ds_e2e.db),
+# so the separately-started proxy can be pointed at the same DB via --db.
+DB_PATH = os.path.join(tempfile.gettempdir(), "ds_e2e.db")
 
 
 def _read_key() -> str:

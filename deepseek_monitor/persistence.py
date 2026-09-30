@@ -39,6 +39,17 @@ from deepseek_monitor.paths import (
 )
 
 
+def _chmod_private(path: str) -> None:
+    """Restrict file permissions to the owner (``0600``).
+
+    No-op on Windows, where ``os.chmod`` only toggles the read-only flag and
+    per-owner permissions are not applicable.
+    """
+    if os.name == "nt":
+        return
+    os.chmod(path, 0o600)
+
+
 def load_timezone() -> str:
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -110,7 +121,7 @@ def save_api_key(key: str) -> None:
         f.write(key + "\n")
 
     try:
-        os.chmod(API_KEY_FILE, 0o600)
+        _chmod_private(API_KEY_FILE)
     except OSError:
         pass
 
@@ -167,7 +178,7 @@ def save_influx_config(cfg: dict[str, str]) -> None:
     try:
         with open(INFLUX_CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(cfg, f, ensure_ascii=False, separators=(",", ":"))
-        os.chmod(INFLUX_CONFIG_FILE, 0o600)
+        _chmod_private(INFLUX_CONFIG_FILE)
     except OSError:
         pass
 

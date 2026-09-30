@@ -195,8 +195,19 @@ def main(argv: list[str] | None = None) -> int:
         logger.info("Signal %s received -- shutting down", signal.Signals(signum).name)
         stop_event.set()
 
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        signal.signal(sig, _handle_signal)
+    # SIGINT works everywhere. SIGTERM is a no-op on Windows (it exists as a
+    # constant but is never delivered by the OS); SIGBREAK is the Windows
+    # equivalent of Ctrl+Break. Register only what the platform supports.
+    _signals = [signal.SIGINT]
+    for _name in ("SIGTERM", "SIGBREAK"):
+        _sig = getattr(signal, _name, None)
+        if _sig is not None:
+            _signals.append(_sig)
+    for sig in _signals:
+        try:
+            signal.signal(sig, _handle_signal)
+        except (ValueError, OSError):
+            logger.warning("Could not register signal handler for %s", sig)
 
     server.start()
     logger.info("Proxy ready at %s", server.base_url)

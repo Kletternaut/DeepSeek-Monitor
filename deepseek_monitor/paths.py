@@ -17,9 +17,31 @@ import os
 import zoneinfo
 
 
+def _is_windows() -> bool:
+    return os.name == "nt"
+
+
 def _xdg_base(env_var: str, default_path: str) -> str:
     value = os.environ.get(env_var, "").strip()
     return value if value else os.path.expanduser(default_path)
+
+
+def _config_base() -> str:
+    if _is_windows():
+        return _xdg_base("APPDATA", "~/.config")
+    return _xdg_base("XDG_CONFIG_HOME", "~/.config")
+
+
+def _state_base() -> str:
+    if _is_windows():
+        return _xdg_base("LOCALAPPDATA", "~/.local/state")
+    return _xdg_base("XDG_STATE_HOME", "~/.local/state")
+
+
+def _data_base() -> str:
+    if _is_windows():
+        return _xdg_base("LOCALAPPDATA", "~/.local/share")
+    return _xdg_base("XDG_DATA_HOME", "~/.local/share")
 
 
 def _ensure_dir(path: str) -> str:
@@ -27,15 +49,9 @@ def _ensure_dir(path: str) -> str:
     return path
 
 
-CONFIG_DIR = _ensure_dir(
-    os.path.join(_xdg_base("XDG_CONFIG_HOME", "~/.config"), "deepseek")
-)
-STATE_DIR = _ensure_dir(
-    os.path.join(_xdg_base("XDG_STATE_HOME", "~/.local/state"), "deepseek")
-)
-DATA_DIR = _ensure_dir(
-    os.path.join(_xdg_base("XDG_DATA_HOME", "~/.local/share"), "deepseek")
-)
+CONFIG_DIR = _ensure_dir(os.path.join(_config_base(), "deepseek"))
+STATE_DIR = _ensure_dir(os.path.join(_state_base(), "deepseek"))
+DATA_DIR = _ensure_dir(os.path.join(_data_base(), "deepseek"))
 
 POS_FILE = os.path.join(CONFIG_DIR, "tarif_pos")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "tarif_config")
