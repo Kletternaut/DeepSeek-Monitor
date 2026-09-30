@@ -3801,7 +3801,11 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
 # ============================================================
 
 if __name__ == "__main__":
+    from deepseek_monitor.dpi import apply_tk_scaling, enable_dpi_awareness
+
+    enable_dpi_awareness()
     root = tk.Tk()
+    apply_tk_scaling(root)
     app = DeepSeekFiligreeGUI(root)
     root.after(100, app.update_loop)
     root.mainloop()

@@ -183,7 +183,11 @@ class UsageDetailApp:
         self._label_to_fp: dict[str, str] = {}
         self._after_id: str | None = None
 
+        from deepseek_monitor.dpi import apply_tk_scaling, enable_dpi_awareness
+
+        enable_dpi_awareness()
         self._root = tk.Tk()
+        apply_tk_scaling(self._root)
         self._root.title("DeepSeek Cost & Usage (exact)")
         self._root.geometry("1000x740")
         self._root.configure(bg=_BG)

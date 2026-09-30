@@ -46,6 +46,7 @@ python -m PyInstaller --noconfirm --clean --onefile --console `
     --hidden-import PIL.ImageDraw `
     --hidden-import deepseek_monitor.config `
     --hidden-import deepseek_monitor.persistence `
+    --hidden-import deepseek_monitor.dpi `
     --hidden-import proxy.influx_dialog `
     --icon assets\deepseek-proxy-256.png `
     deepseek-proxy\main.py
