@@ -55,7 +55,14 @@ The script:
 - [ ] No `ZoneInfoNotFoundError` in the console
 - [ ] Stopping with **Ctrl+C** shuts down cleanly (`Proxy stopped`)
 
-**Data path:** the SQLite DB is at `%LOCALAPPDATA%\deepseek\usage.db`.
+**Data locations:**
+
+| Purpose | Linux | Windows |
+|---|---|---|
+| Config / API key | `~/.config/deepseek/` | `%APPDATA%\deepseek\` |
+| State / SQLite DB | `~/.local/state/deepseek/` | `%LOCALAPPDATA%\deepseek\` |
+
+The SQLite DB is therefore at `%LOCALAPPDATA%\deepseek\usage.db`.
 
 ---
 
@@ -73,9 +80,10 @@ The script:
 - [ ] Data source switchable (Local/SQLite vs. InfluxDB)
 
 **Important — shared API key:**
-The monitor stores the key at `%APPDATA%\deepseek\api_key`.
-The **proxy does not read this key** — it only forwards the client's
-`x-api-key` header. The key in `%APPDATA%` is used by the monitor alone.
+The API key is read from `%APPDATA%\deepseek\api_key` — by the **monitor**
+(which stores and reads it) and by the proxy's validation script
+(`checkpoint.py`). The running proxy server itself does **not** read the key:
+it only forwards the client's `x-api-key` header unchanged.
 
 ---
 
@@ -101,5 +109,6 @@ Unregister-ScheduledTask -TaskName "DeepSeek-Proxy" -Confirm:$false
 ## 6. VS Code as a client through the proxy (optional)
 
 `~/.config/Code/User/chatLanguageModels.json` (Windows:
-`%APPDATA%\Code\User\chatLanguageModels.json`) — see section 6 of
-`INSTALLATION.md`; the proxy listens on `http://127.0.0.1:8000/anthropic`.
+`%APPDATA%\Code\User\chatLanguageModels.json`) — see
+[section 6 of `INSTALLATION.md`](INSTALLATION.md#6-set-up-vs-code-custom-endpoint);
+the proxy listens on `http://127.0.0.1:8000/anthropic`.
