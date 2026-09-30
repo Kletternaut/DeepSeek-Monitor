@@ -41,6 +41,10 @@ python -m PyInstaller --noconfirm --clean --onefile --console `
     --hidden-import influxdb_client `
     --hidden-import tkinter `
     --hidden-import proxy.tkinter_view `
+    --hidden-import pystray `
+    --hidden-import PIL.Image `
+    --hidden-import PIL.ImageDraw `
+    --hidden-import deepseek_monitor.config `
     --icon assets\deepseek-proxy-256.png `
     deepseek-proxy\main.py
 

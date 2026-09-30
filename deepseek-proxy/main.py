@@ -78,6 +78,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--tray",
+        action="store_true",
+        default=False,
+        help=(
+            "Show a system-tray icon (Windows only) to monitor the proxy and "
+            "quit it. Requires the optional 'pystray'/'Pillow' packages."
+        ),
+    )
+    parser.add_argument(
         "--influx-url",
         default=None,
         help=(
@@ -211,6 +220,19 @@ def main(argv: list[str] | None = None) -> int:
 
     server.start()
     logger.info("Proxy ready at %s", server.base_url)
+
+    # System-tray icon (opt-in, Windows only, lazy pystray+Pillow import).
+    if args.tray:
+        from proxy.tray import start_tray, tray_supported
+
+        if tray_supported():
+            start_tray(
+                port=args.port,
+                base_url=server.base_url,
+                stop_event=stop_event,
+            )
+        else:
+            logger.info("--tray requested but unsupported on this platform; ignored.")
 
     try:
         # Poll instead of a single blocking wait: on Windows a blocking
