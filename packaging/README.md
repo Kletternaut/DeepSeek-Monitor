@@ -32,5 +32,5 @@ Output: `dist\DeepSeek-Monitor.exe` (GUI) and `dist\DeepSeek-Proxy.exe`
   incompatibility.
 - The monitor is built `--windowed` (no console), the proxy `--console`
   (visible logs). Both are `--onefile`.
-- Data locations differ per OS (see `INSTALLATION.md`); the shared API key
+- Data locations differ per OS (see `docs/INSTALLATION.md`); the shared API key
   lives in `%APPDATA%\deepseek\api_key` on Windows.

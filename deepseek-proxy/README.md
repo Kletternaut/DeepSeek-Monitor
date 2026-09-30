@@ -61,7 +61,7 @@ Windows the tray icon (via `--tray`) offers an additional "Beenden" action.
 
 For building and running standalone `.exe` files, see the Windows packaging
 documentation: [`../packaging/README.md`](../packaging/README.md) and
-[`../WINDOWS_SETUP.md`](../WINDOWS_SETUP.md).
+[`../docs/WINDOWS_SETUP.md`](../docs/WINDOWS_SETUP.md).
 
 ## Set up VS Code
 

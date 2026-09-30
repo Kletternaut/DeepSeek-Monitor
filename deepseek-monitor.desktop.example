@@ -25,5 +25,5 @@ Keywords=DeepSeek;Monitor;Cost;Usage;Tkinter;
 #
 # The monitor is a GUI app (Terminal=false); it shows the tariff widget,
 # the "Cost & Usage" window and the settings. It reads usage from the local
-# proxy/SQLite or a central InfluxDB (see INSTALLATION.md).
+# proxy/SQLite or a central InfluxDB (see docs/INSTALLATION.md).
 # ---------------------------------------------------------------------------

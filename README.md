@@ -86,10 +86,10 @@ and the full overview:
 
 | File | Content |
 |---|---|
-| [`INSTALLATION.md`](INSTALLATION.md) | Installation (Proxy, Monitor, systemd, VS Code, Windows) |
-| [`WINDOWS_SETUP.md`](WINDOWS_SETUP.md) | Windows 11: build & test the `.exe` files |
-| [`INFLUXDB.md`](INFLUXDB.md) | InfluxDB 2.x integration in detail |
-| [`STRUCTURE.md`](STRUCTURE.md) | Directory/file reference |
+| [`docs/INSTALLATION.md`](docs/INSTALLATION.md) | Installation (Proxy, Monitor, systemd, VS Code, Windows) |
+| [`docs/WINDOWS_SETUP.md`](docs/WINDOWS_SETUP.md) | Windows 11: build & test the `.exe` files |
+| [`docs/INFLUXDB.md`](docs/INFLUXDB.md) | InfluxDB 2.x integration in detail |
+| [`docs/STRUCTURE.md`](docs/STRUCTURE.md) | Directory/file reference |
 | [`packaging/README.md`](packaging/README.md) | PyInstaller build for Windows |
 
 ## Quickstart
@@ -102,7 +102,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
 
 For the full steps (including `influx.env`, VS Code setup, systemd and starting
-the monitor): see **[`INSTALLATION.md`](INSTALLATION.md)**.
+the monitor): see **[`docs/INSTALLATION.md`](docs/INSTALLATION.md)**.
 
 ## License
 
@@ -110,4 +110,4 @@ MIT — see [LICENSE](LICENSE).
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).

@@ -17,11 +17,6 @@ This repository bundles two components for monitoring DeepSeek API usage:
 ```
 .
 ├── README.md                    # entry point: overview, quick install, VS Code setup
-├── INSTALLATION.md              # step-by-step guide: installation on additional hosts
-├── WINDOWS_SETUP.md             # Windows 11: build & test the standalone .exe files
-├── INFLUXDB.md                  # InfluxDB 2.x integration: architecture, write/read path, downsampling
-├── STRUCTURE.md                 # this file: directory/file reference
-├── changelog.md                 # change history
 ├── deepseek_rates.py            # the monitor (Tkinter frontend); imports the logic from deepseek_monitor/
 ├── deepseek-monitor.desktop.example  # desktop entry to start the monitor app manually
 ├── deepseek_monitor/            # pure, Tkinter-free logic of the monitor app (package)
@@ -35,8 +30,14 @@ This repository bundles two components for monitoring DeepSeek API usage:
 │   ├── api.py                   # balance API (fetch_balance, parse_balance)
 │   ├── tariff.py                # tariff logic (peak/standard/weekend)
 │   └── analytics.py             # usage analysis (proxy/Influx data)
+├── docs/                        # project documentation
+│   ├── INSTALLATION.md          # step-by-step guide: installation on additional hosts
+│   ├── WINDOWS_SETUP.md         # Windows 11: build & test the standalone .exe files
+│   ├── INFLUXDB.md              # InfluxDB 2.x integration: architecture, write/read path, downsampling
+│   ├── STRUCTURE.md             # this file: directory/file reference
+│   ├── changelog.md             # change history
+│   └── CONTRIBUTING.md          # contribution guide
 ├── LICENSE                      # MIT license
-├── CONTRIBUTING.md              # contribution guide
 ├── pyproject.toml               # project metadata + tooling (ruff/black/pytest/mypy)
 ├── .editorconfig                # editor conventions
 ├── .pre-commit-config.yaml      # pre-commit hooks (ruff, black)

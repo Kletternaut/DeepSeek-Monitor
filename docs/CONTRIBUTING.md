@@ -5,7 +5,7 @@ independent open-source tool and is in no way affiliated with DeepSeek (深度�
 
 ## Before you start
 
-- Read the [README.md](README.md) and [INSTALLATION.md](INSTALLATION.md).
+- Read the [README.md](../README.md) and [INSTALLATION.md](INSTALLATION.md).
 - Open an issue for larger changes before investing much time.
 
 ## Development environment

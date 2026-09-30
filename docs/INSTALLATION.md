@@ -226,4 +226,4 @@ still listens on `http://127.0.0.1:8000/anthropic`.
 
 ---
 
-Weitere Details: [`README.md`](README.md) · [`INFLUXDB.md`](INFLUXDB.md) · [`STRUCTURE.md`](STRUCTURE.md)
+Weitere Details: [`README.md`](../README.md) · [`INFLUXDB.md`](INFLUXDB.md) · [`STRUCTURE.md`](STRUCTURE.md)
