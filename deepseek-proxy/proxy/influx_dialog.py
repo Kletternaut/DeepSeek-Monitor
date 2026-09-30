@@ -44,13 +44,11 @@ def open_influx_dialog(initial: dict[str, str] | None = None) -> dict[str, str] 
     """
     import tkinter as tk
 
-    from deepseek_monitor.dpi import apply_tk_scaling, enable_dpi_awareness
-
-    enable_dpi_awareness()
+    from deepseek_monitor.assets import set_window_icon
 
     initial = initial or {}
     root = tk.Tk()
-    apply_tk_scaling(root)
+    set_window_icon(root, "deepseek-proxy-256.png")
     root.title("DeepSeek Proxy — InfluxDB konfigurieren")
     root.configure(bg=_BG)
     root.resizable(False, False)

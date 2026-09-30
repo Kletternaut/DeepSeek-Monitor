@@ -183,15 +183,15 @@ class UsageDetailApp:
         self._label_to_fp: dict[str, str] = {}
         self._after_id: str | None = None
 
-        from deepseek_monitor.dpi import apply_tk_scaling, enable_dpi_awareness
-
-        enable_dpi_awareness()
         self._root = tk.Tk()
-        apply_tk_scaling(self._root)
         self._root.title("DeepSeek Cost & Usage (exact)")
         self._root.geometry("1000x740")
         self._root.configure(bg=_BG)
         self._root.minsize(760, 560)
+
+        from deepseek_monitor.assets import set_window_icon
+
+        set_window_icon(self._root, "deepseek-proxy-256.png")
 
         self._last_updated = tk.StringVar(value="not yet updated")
         self._kpi_vars: dict[str, tk.StringVar] = {

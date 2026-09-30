@@ -30,6 +30,8 @@ Write-Host "==> Building DeepSeek-Monitor.exe (GUI)" -ForegroundColor Cyan
 python -m PyInstaller --noconfirm --clean --onefile --windowed `
     --name "DeepSeek-Monitor" `
     --collect-data tzdata `
+    --add-data "assets;assets" `
+    --hidden-import deepseek_monitor.assets `
     --icon assets\deepseek-monitor-256.png `
     deepseek_rates_v2.4.0.py
 
@@ -37,6 +39,7 @@ Write-Host "==> Building DeepSeek-Proxy.exe (server + web dashboard)" -Foregroun
 python -m PyInstaller --noconfirm --clean --onefile --console `
     --name "DeepSeek-Proxy" `
     --collect-data tzdata `
+    --add-data "assets;assets" `
     --collect-submodules uvicorn `
     --hidden-import influxdb_client `
     --hidden-import tkinter `
@@ -46,7 +49,7 @@ python -m PyInstaller --noconfirm --clean --onefile --console `
     --hidden-import PIL.ImageDraw `
     --hidden-import deepseek_monitor.config `
     --hidden-import deepseek_monitor.persistence `
-    --hidden-import deepseek_monitor.dpi `
+    --hidden-import deepseek_monitor.assets `
     --hidden-import proxy.influx_dialog `
     --icon assets\deepseek-proxy-256.png `
     deepseek-proxy\main.py
