@@ -30,10 +30,6 @@ GITHUB_URL = "https://github.com/Kletternaut/DeepSeek-Monitor"
 
 _APP_NAME = "DeepSeek Proxy"
 
-#: Fallback version if ``deepseek_monitor.config`` is not importable. Keep in
-#: sync with ``deepseek_monitor.config.APP_VERSION``.
-_FALLBACK_VERSION = "2.4.0"
-
 
 def tray_supported() -> bool:
     """Return ``True`` if a tray icon can be shown (Windows only)."""
@@ -41,13 +37,11 @@ def tray_supported() -> bool:
 
 
 def _app_version() -> str:
-    """Resolve the app version, preferring ``deepseek_monitor.config``."""
-    try:
-        from deepseek_monitor.config import APP_VERSION
+    """Return the app version from the single source of truth
+    (``deepseek_monitor.config.APP_VERSION``)."""
+    from deepseek_monitor.config import APP_VERSION
 
-        return APP_VERSION
-    except Exception:  # pragma: no cover - depends on import path
-        return _FALLBACK_VERSION
+    return APP_VERSION
 
 
 def _open_url(url: str) -> None:

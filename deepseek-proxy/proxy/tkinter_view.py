@@ -189,9 +189,15 @@ class UsageDetailApp:
         self._root.configure(bg=_BG)
         self._root.minsize(760, 560)
 
-        from deepseek_monitor.assets import set_window_icon
-
-        set_window_icon(self._root, "deepseek-proxy-256.png")
+        try:
+            from deepseek_monitor.assets import set_window_icon
+        except ImportError:
+            # deepseek_monitor is not importable when the proxy is started from
+            # the deepseek-proxy/ directory (it lives in the repo root). The
+            # icon is cosmetic; skip it instead of failing.
+            pass
+        else:
+            set_window_icon(self._root, "deepseek-proxy-256.png")
 
         self._last_updated = tk.StringVar(value="not yet updated")
         self._kpi_vars: dict[str, tk.StringVar] = {
