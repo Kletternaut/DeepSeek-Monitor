@@ -30,12 +30,21 @@ def detect_language() -> str:
         os.environ.get("LANG", ""),
         os.environ.get("LANGUAGE", ""),
     ]
+    if os.name == "nt":
+        # Windows: read the user's UI language from the OS (e.g. "de-DE").
+        try:
+            import ctypes
+
+            lang_id = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+            values.append(locale.windows_locale.get(lang_id, "") or "")
+        except (ImportError, AttributeError, OSError):
+            pass
     try:
         values.append(locale.getlocale()[0] or "")
     except (ValueError, AttributeError):
         pass
     for value in values:
-        value = (value or "").lower()
+        value = (value or "").lower().replace("_", "-")
         for prefix in LANGUAGES:
             if value.startswith(prefix):
                 return prefix

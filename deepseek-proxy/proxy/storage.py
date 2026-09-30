@@ -16,14 +16,16 @@ import logging
 import os
 import sqlite3
 
+from .paths import DB_FILE
 from .usage import TokenUsage
 
 logger = logging.getLogger("deepseek_proxy.storage")
 
 __all__ = ["Storage", "DEFAULT_DB_PATH", "row_to_usage"]
 
-#: Default path of the SQLite database.
-DEFAULT_DB_PATH = "~/.local/state/deepseek/usage.db"
+#: Default path of the SQLite database (``~/.local/state/deepseek/usage.db`` on
+#: Linux, ``%LOCALAPPDATA%\deepseek\usage.db`` on Windows).
+DEFAULT_DB_PATH = DB_FILE
 
 _SCHEMA = (
     """

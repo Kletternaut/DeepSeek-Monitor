@@ -1432,7 +1432,7 @@ class _LegacyDeepSeekFiligreeGUI:
             if not api_key:
                 self._set_balance_error(
                     "No API key: set DEEPSEEK_API_KEY "
-                    "or create ~/.config/deepseek/api_key"
+                    f"or create {API_KEY_FILE}"
                 )
                 return
 
@@ -2267,19 +2267,9 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
 
     def _set_app_icon(self) -> None:
         """Set the app icon for the window/taskbar."""
-        try:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            candidates = (
-                os.path.join(base_dir, "assets", "deepseek-monitor-256.png"),
-                os.path.join(base_dir, "deepseek_logo.png"),
-            )
-            for png_path in candidates:
-                if os.path.exists(png_path):
-                    self._icon_image = tk.PhotoImage(file=png_path)
-                    self.root.iconphoto(True, self._icon_image)
-                    break
-        except (OSError, tk.TclError):
-            pass
+        from deepseek_monitor.assets import set_window_icon
+
+        set_window_icon(self.root, "deepseek-monitor-256.png")
 
     def _load_geometry(
         self,
