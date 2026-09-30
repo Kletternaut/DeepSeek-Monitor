@@ -1,6 +1,6 @@
 # InfluxDB integration — documentation
 
-> Status: 2026-09-30 · applies to `deepseek_rates_v2.4.0.py` and `deepseek-proxy/`
+> Status: 2026-09-30 · applies to `deepseek_rates.py` and `deepseek-proxy/`
 
 This documentation describes the architecture, configuration and operation of
 the InfluxDB 2.x integration for DeepSeek cost monitoring.
@@ -164,8 +164,7 @@ window. It lists all known hosts; "All hosts" = aggregated across all.
 
 | File | Purpose |
 |---|---|
-| `deepseek_rates_v2.4.0.py` | App, env switch + GUI switch + host filter |
-| `deepseek_rates_latest.py` | Symlink → `deepseek_rates_v2.4.0.py` |
+| `deepseek_rates.py` | App, env switch + GUI switch + host filter |
 | `deepseek-proxy/proxy/influx_sink.py` | Write sink (InfluxSink) |
 | `deepseek-proxy/main.py` | Flags + combined callback |
 | `deepseek-proxy/influx.env` | Influx credentials (secret, 0600, ignored) |

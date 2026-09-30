@@ -4,6 +4,9 @@
 
 - **Version 0.2.0**: project version reset to a pre-release and centralized in
   a single source (`deepseek_monitor/_version.py`).
+- **Renamed monitor entry point**: `deepseek_rates_v2.4.0.py` →
+  `deepseek_rates.py`; the versioned `deepseek_rates_latest.py` symlink was
+  removed (the filename no longer carries a version).
 - **Windows port (Win11/25H2)**: native config/state paths
   (`%APPDATA%`/`%LOCALAPPDATA%`), `tzdata` dependency, PyInstaller packaging
   (`packaging/`), proxy start/service scripts and a Windows system-tray icon
@@ -16,7 +19,8 @@
   `CONTRIBUTING.md`, `pyproject.toml`, `.editorconfig`,
   `.pre-commit-config.yaml`, CI (`.github/workflows/ci.yml`).
 - **Split monofile**: the pure, Tkinter-free logic of
-  `deepseek_rates_v2.4.0.py` was extracted into the `deepseek_monitor/` package
+  `deepseek_rates_v2.4.0.py` (now `deepseek_rates.py`) was extracted into the
+  `deepseek_monitor/` package
   (`config`, `i18n`, `paths`, `persistence`, `api`, `tariff`, `analytics`). The
   monofile is now a slim Tkinter frontend.
 - **Portable paths**: absolute `/home/admin` paths and internal IP addresses

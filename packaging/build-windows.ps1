@@ -33,7 +33,7 @@ python -m PyInstaller --noconfirm --clean --onefile --windowed `
     --add-data "assets;assets" `
     --hidden-import deepseek_monitor.assets `
     --icon assets\deepseek-monitor-256.png `
-    deepseek_rates_v2.4.0.py
+    deepseek_rates.py
 
 Write-Host "==> Building DeepSeek-Proxy.exe (server + web dashboard)" -ForegroundColor Cyan
 python -m PyInstaller --noconfirm --clean --onefile --console `

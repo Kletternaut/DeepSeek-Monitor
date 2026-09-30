@@ -56,7 +56,7 @@ cost and usage.
 | Component | Path | Purpose |
 |---|---|---|
 | **Proxy** | `deepseek-proxy/` | Captures the real token/cost data (data source) |
-| **Monitor** | `deepseek_rates_latest.py` → `deepseek_rates_v2.4.0.py` | Tkinter app "Cost & Usage" (analytics) |
+| **Monitor** | `deepseek_rates.py` | Tkinter app "Cost & Usage" (analytics) |
 
 ## Architecture
 

@@ -8,7 +8,7 @@
 This repository bundles two components for monitoring DeepSeek API usage:
 
 - **Proxy** (`deepseek-proxy/`) — streaming proxy between VS Code and DeepSeek, records token usage.
-- **Monitor** (`deepseek_rates_latest.py` → `deepseek_rates_v2.4.0.py` + `deepseek_monitor/`) — Tkinter app "Cost & Usage"; the pure, Tkinter-free logic lives in the `deepseek_monitor/` package.
+- **Monitor** (`deepseek_rates.py` + `deepseek_monitor/`) — Tkinter app "Cost & Usage"; the pure, Tkinter-free logic lives in the `deepseek_monitor/` package.
 
 ---
 
@@ -22,8 +22,7 @@ This repository bundles two components for monitoring DeepSeek API usage:
 ├── INFLUXDB.md                  # InfluxDB 2.x integration: architecture, write/read path, downsampling
 ├── STRUCTURE.md                 # this file: directory/file reference
 ├── changelog.md                 # change history
-├── deepseek_rates_v2.4.0.py     # the monitor (Tkinter frontend); imports the logic from deepseek_monitor/
-├── deepseek_rates_latest.py     # symlink → deepseek_rates_v2.4.0.py (stable start path)
+├── deepseek_rates.py            # the monitor (Tkinter frontend); imports the logic from deepseek_monitor/
 ├── deepseek-monitor.desktop.example  # desktop entry to start the monitor app manually
 ├── deepseek_monitor/            # pure, Tkinter-free logic of the monitor app (package)
 │   ├── __init__.py              # package marker + version

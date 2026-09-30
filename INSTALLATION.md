@@ -68,7 +68,7 @@ See `deepseek-proxy/README.md`.
 ## 4. Start the monitor
 
 ```bash
-python3 deepseek_rates_latest.py
+python3 deepseek_rates.py
 ```
 
 The data source (local proxy/SQLite vs. central InfluxDB) is selected in the
