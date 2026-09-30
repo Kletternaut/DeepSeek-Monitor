@@ -1,6 +1,6 @@
 # InfluxDB integration — documentation
 
-> Status: 2026-09-25 · applies to `deepseek_rates_v2.4.0.py` and `deepseek-proxy/`
+> Status: 2026-09-30 · applies to `deepseek_rates_v2.4.0.py` and `deepseek-proxy/`
 
 This documentation describes the architecture, configuration and operation of
 the InfluxDB 2.x integration for DeepSeek cost monitoring.
@@ -37,6 +37,13 @@ There are **two independent** configuration points:
 
 The **proxy has no Influx/SQLite switch** — SQLite is always active, Influx is
 purely additive.
+
+> **Note (shared config):** As of the Windows port, the proxy additionally
+> reads the **same persisted Influx config** the monitor writes (JSON in the
+> platform config dir, e.g. `~/.config/deepseek/influx_config` or
+> `%APPDATA%\deepseek\influx_config`) as a **fallback** when no
+> `--influx-url`/env is set. This lets the Windows tray dialog configure a
+> single data source shared by both components.
 
 ---
 

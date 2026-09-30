@@ -22,6 +22,7 @@ build/
 
 # Lokale Copilot-Notizen (nur lokal, nicht im Repo)
 .copilot/
+.copilot-exchange/
 
 # GROSS geschriebene Ordner werden nie gepusht
 BACKUP/

@@ -1,7 +1,6 @@
 # Windows-Installation & Test-Anleitung (Win11 / 25H2)
 
-Diese Anleitung ist für den Test-Agenten gedacht, der den Windows-Port auf der
-Entwicklungsmaschine `DESKTOP-LUFGE4R` (192.168.0.21) prüft.
+Diese Anleitung beschreibt, wie der Windows-Port gebaut und getestet wird.
 
 ---
 
@@ -16,16 +15,14 @@ Entwicklungsmaschine `DESKTOP-LUFGE4R` (192.168.0.21) prüft.
 
 ---
 
-## 1. Repository klonen (neuer Branch)
+## 1. Repository klonen
 
 ```powershell
 git clone https://github.com/Kletternaut/DeepSeek-Monitor.git
 cd DeepSeek-Monitor
-git checkout feature/windows-port
 ```
 
-> Falls der Branch noch nicht auf dem Remote sichtbar ist:
-> `git fetch origin && git checkout -b feature/windows-port origin/feature/windows-port`
+Der Windows-Port ist bereits in `main` integriert — kein separater Branch nötig.
 
 ---
 
