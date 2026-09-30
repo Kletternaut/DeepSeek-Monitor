@@ -1,6 +1,6 @@
 [project]
 name = "deepseek-monitor"
-version = "2.4.0"
+dynamic = ["version"]
 description = "Eigenständiges Open-Source-Tool zur Überwachung von DeepSeek-API-Kosten und -Verbrauch. Kein offizielles DeepSeek-Produkt; steht in keiner Verbindung zu DeepSeek (深度求索)."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -30,6 +30,13 @@ dev = [
     "black>=24.0",
     "mypy>=1.8",
 ]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = { attr = "deepseek_monitor._version.__version__" }
 
 [tool.ruff]
 line-length = 100

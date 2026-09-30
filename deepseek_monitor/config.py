@@ -25,7 +25,9 @@ import zoneinfo
 
 UTC = dt.timezone.utc
 APP_NAME = "DeepSeek Monitor"
-APP_VERSION = "2.4.0"
+
+# The project version lives in a single place: ``deepseek_monitor._version``.
+from deepseek_monitor._version import __version__ as APP_VERSION
 
 # Tariff assumption from the original version
 PEAK_WINDOWS_UTC = (
