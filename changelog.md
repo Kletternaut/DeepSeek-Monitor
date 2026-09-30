@@ -1,9 +1,9 @@
 # Changelog
 
-## Unreleased (0.2.0)
+## 0.2.0 (pre-release)
 
-- **Version 0.2.0** (pre-release): project version centralized in a single
-  source (`deepseek_monitor/_version.py`).
+- **Version 0.2.0**: project version reset to a pre-release and centralized in
+  a single source (`deepseek_monitor/_version.py`).
 - **Windows port (Win11/25H2)**: native config/state paths
   (`%APPDATA%`/`%LOCALAPPDATA%`), `tzdata` dependency, PyInstaller packaging
   (`packaging/`), proxy start/service scripts and a Windows system-tray icon
@@ -11,18 +11,24 @@
 - **Proxy enhancements**: InfluxDB configuration via tray dialog (shared data
   source with the monitor), cross-platform paths module (`proxy/paths.py`),
   SIGBREAK-aware signal handling, DPI/window-icon handling for Tkinter.
+- **Open-source maturity review**: MIT license (`LICENSE`), disclaimer
+  ("independent open-source project, no affiliation with DeepSeek"),
+  `CONTRIBUTING.md`, `pyproject.toml`, `.editorconfig`,
+  `.pre-commit-config.yaml`, CI (`.github/workflows/ci.yml`).
+- **Split monofile**: the pure, Tkinter-free logic of
+  `deepseek_rates_v2.4.0.py` was extracted into the `deepseek_monitor/` package
+  (`config`, `i18n`, `paths`, `persistence`, `api`, `tariff`, `analytics`). The
+  monofile is now a slim Tkinter frontend.
+- **Portable paths**: absolute `/home/admin` paths and internal IP addresses
+  removed from tracked files (relative/`~` paths, placeholders).
+- **New app icon**: brand-neutral icon (`assets/deepseek-monitor.svg` + PNG
+  sizes) instead of DeepSeek trademarks.
+- **Added tests**: `tests/test_deepseek_monitor.py` for tariff logic, API
+  parsing, currency formatting and color helpers.
 - **Repository cleanup**: `.copilot-exchange/` removed from tracking and added
   to `.gitignore`; documentation reviewed and updated for the proxy's central
   role (`README.md`, `STRUCTURE.md`, `deepseek-proxy/README.md`,
   `WINDOWS_SETUP.md`).
-
-## 0.1.0 — 2026-09-25
-
-- **Open-source maturity review**: MIT license (`LICENSE`), disclaimer ("independent open-source project, no affiliation with DeepSeek"), `CONTRIBUTING.md`, `pyproject.toml`, `.editorconfig`, `.pre-commit-config.yaml`, CI (`.github/workflows/ci.yml`).
-- **Split monofile**: the pure, Tkinter-free logic of `deepseek_rates_v2.4.0.py` was extracted into the `deepseek_monitor/` package (`config`, `i18n`, `paths`, `persistence`, `api`, `tariff`, `analytics`). The monofile is now a slim Tkinter frontend.
-- **Portable paths**: absolute `/home/admin` paths and internal IP addresses removed from tracked files (relative/`~` paths, placeholders).
-- **New app icon**: brand-neutral icon (`assets/deepseek-monitor.svg` + PNG sizes) instead of DeepSeek trademarks.
-- **Added tests**: `tests/test_deepseek_monitor.py` for tariff logic, API parsing, currency formatting and color helpers.
 
 ## 2.4.0 — 2026-09-25
 

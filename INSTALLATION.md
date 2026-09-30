@@ -165,8 +165,10 @@ stored in the native locations instead of the XDG directories:
 | Config / API key | `~/.config/deepseek/` | `%APPDATA%\deepseek\` |
 | State / SQLite DB | `~/.local/state/deepseek/` | `%LOCALAPPDATA%\deepseek\` |
 
-The API key is therefore read from `%APPDATA%\deepseek\api_key` on Windows
-(the monitor and proxy share the same file, exactly as on Linux).
+The API key is read from `%APPDATA%\deepseek\api_key` on Windows — by the
+**monitor** (which stores and reads it) and by the proxy's validation script
+(`checkpoint.py`). The running proxy server itself does **not** read the key:
+it only forwards the client's `x-api-key` header unchanged.
 
 ### A. Build standalone .exe files (PyInstaller)
 

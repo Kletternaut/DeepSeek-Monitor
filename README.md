@@ -4,59 +4,59 @@
 > way affiliated with DeepSeek (深度求索)**. It is not developed, sponsored,
 > endorsed, or operated by DeepSeek.
 
-**Kosten- und Verbrauchsüberwachung für die DeepSeek-API** — ein kleines
-Toolkit aus zwei Komponenten: einem **Proxy** (die Datenquelle) und einer
-**Monitor-GUI** (die Auswertung).
+**Cost and usage monitoring for the DeepSeek API** — a small toolkit of two
+components: a **proxy** (the data source) and a **monitor GUI** (the
+analytics).
 
 ---
 
-## Warum es dieses Tool gibt (Daseinsberechtigung des Proxys)
+## Why this tool exists (the proxy's purpose)
 
-Die DeepSeek-API meldet über ihren Balance-Endpunkt (`/user/balance`) nur ein
-**Gesamtguthaben** in einer Währung — **keine** Aufschlüsselung nach einzelnen
-Requests, Modellen oder Zeitfenstern. Wer wissen will, was ein Chat, ein Tag
-oder ein bestimmtes Modell **wirklich kostet**, bekommt daraus nur eine grobe
-Delta-Schätzung.
+The DeepSeek API reports only a **total balance** in a single currency via its
+balance endpoint (`/user/balance`) — **no** breakdown by individual request,
+model, or time window. If you want to know what a chat, a day, or a specific
+model **actually costs**, you only get a rough delta estimate from that.
 
-Genau hier setzt der **Proxy** an: Er sitzt als transparenter Mittelsmann
-zwischen deinem Client (z. B. VS Code) und der DeepSeek-API und **liest aus
-jedem gestreamten Response die echten `usage`-Objekte mit** (Input-/Output-/
-Cache-Tokens). Damit wird präzise Abrechnung überhaupt erst möglich:
+That is exactly where the **proxy** comes in: it sits as a transparent
+intermediary between your client (e.g. VS Code) and the DeepSeek API and
+**reads the real `usage` objects from every streamed response** (input/output/
+cache tokens). This is what makes precise accounting possible in the first
+place:
 
-- **Exakte Token-Zahlen pro Request** — statt der ungenauen Guthaben-Differenz.
-- **Echte Kosten** unter Berücksichtigung des DeepSeek-Tarifs (Peak/Off-Peak,
-  Wochenende, Cache-Hit/-Miss, je Modell).
-- **Mehrere Hosts zentral** zusammenführen (via InfluxDB), inkl. Host-Filter.
+- **Exact token counts per request** — instead of the imprecise balance delta.
+- **Real costs** accounting for the DeepSeek tariff (peak/off-peak, weekend,
+  cache hit/miss, per model).
+- **Centralize multiple hosts** (via InfluxDB), including a host filter.
 
-Der Proxy verändert dabei **kein Byte** des Requests oder der Antwort — er
-leitet sie unverändert weiter und beobachtet nur.
+The proxy changes **not a single byte** of the request or the response — it
+forwards them unchanged and only observes.
 
 ---
 
-## Was genau der Proxy macht
+## What exactly the proxy does
 
-| Aspekt | Beschreibung |
+| Aspect | Description |
 |---|---|
-| **Transport** | Streaming-Proxy zwischen VS Code (Anthropic Messages API) und `https://api.deepseek.com/anthropic/v1/messages` |
-| **Endpunkte** | `POST /anthropic/v1/messages` und `POST /v1/messages` |
-| **Weiterleitung** | Byte-exakt und unverändert; die Antwort wird als Server-Sent Events (SSE) unverändert zurückgestreamt |
-| **Nebenläufige Erfassung** | Jeder gestreamte Chunk wird inkrementell geparst, die `usage`-Objekte werden gemergt |
-| **Persistenz** | SQLite (immer aktiv, lokal pro Host) + optional InfluxDB 2.x (zentral, Multi-Host) |
-| **Kostenberechnung** | Preis-Modell (`pricing.py` / `cost_calc.py`) mit Peak/Off-Peak, Wochenende und Cache-Hit/-Miss |
-| **Oberflächen** | Web-Dashboard (`http://127.0.0.1:8000/`), Tkinter-Detailansicht (`--view`), Windows-Tray-Icon (`--tray`) |
+| **Transport** | Streaming proxy between VS Code (Anthropic Messages API) and `https://api.deepseek.com/anthropic/v1/messages` |
+| **Endpoints** | `POST /anthropic/v1/messages` and `POST /v1/messages` |
+| **Forwarding** | Byte-exact and unchanged; the response is streamed back unchanged as Server-Sent Events (SSE) |
+| **Decoupled capture** | Every streamed chunk is parsed incrementally, the `usage` objects are merged |
+| **Persistence** | SQLite (always on, local per host) + optional InfluxDB 2.x (central, multi-host) |
+| **Cost calculation** | Price model (`pricing.py` / `cost_calc.py`) with peak/off-peak, weekend and cache hit/miss |
+| **Interfaces** | Web dashboard (`http://127.0.0.1:8000/`), Tkinter detail view (`--view`), Windows tray icon (`--tray`) |
 
-Die **Monitor-GUI** („Cost & Usage") ist die reine Auswertung: Sie liest die
-vom Proxy gesammelten Daten aus SQLite oder InfluxDB und zeigt Tarif, Balance,
-Kosten und Verbrauch an.
+The **monitor GUI** ("Cost & Usage") is the pure analytics layer: it reads the
+data collected by the proxy from SQLite or InfluxDB and shows tariff, balance,
+cost and usage.
 
 ---
 
-## Komponenten
+## Components
 
-| Komponente | Pfad | Zweck |
+| Component | Path | Purpose |
 |---|---|---|
-| **Proxy** | `deepseek-proxy/` | Erfasst die realen Token-/Kostendaten (Datenquelle) |
-| **Monitor** | `deepseek_rates_latest.py` → `deepseek_rates_v2.4.0.py` | Tkinter-App „Cost & Usage" (Auswertung) |
+| **Proxy** | `deepseek-proxy/` | Captures the real token/cost data (data source) |
+| **Monitor** | `deepseek_rates_latest.py` → `deepseek_rates_v2.4.0.py` | Tkinter app "Cost & Usage" (analytics) |
 
 ## Architecture
 
@@ -87,10 +87,10 @@ and the full overview:
 | File | Content |
 |---|---|
 | [`INSTALLATION.md`](INSTALLATION.md) | Installation (Proxy, Monitor, systemd, VS Code, Windows) |
-| [`WINDOWS_SETUP.md`](WINDOWS_SETUP.md) | Windows 11: Build & Test der `.exe`-Dateien |
+| [`WINDOWS_SETUP.md`](WINDOWS_SETUP.md) | Windows 11: build & test the `.exe` files |
 | [`INFLUXDB.md`](INFLUXDB.md) | InfluxDB 2.x integration in detail |
 | [`STRUCTURE.md`](STRUCTURE.md) | Directory/file reference |
-| [`packaging/README.md`](packaging/README.md) | PyInstaller-Build für Windows |
+| [`packaging/README.md`](packaging/README.md) | PyInstaller build for Windows |
 
 ## Quickstart
 
@@ -98,7 +98,7 @@ and the full overview:
 git clone --branch main https://github.com/Kletternaut/DeepSeek-Monitor.git
 cd DeepSeek-Monitor/deepseek-proxy
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python main.py            # Proxy + Web-Dashboard auf http://127.0.0.1:8000/
+.venv/bin/python main.py            # proxy + web dashboard on http://127.0.0.1:8000/
 ```
 
 For the full steps (including `influx.env`, VS Code setup, systemd and starting
