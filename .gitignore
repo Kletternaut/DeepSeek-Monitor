@@ -16,6 +16,10 @@ influx.env
 .idea/
 .vscode/
 
+# PyInstaller-Buildartefakte (dist/ bleibt versionierbar für Release-Zyklen)
+build/
+*.spec
+
 # Lokale Copilot-Notizen (nur lokal, nicht im Repo)
 .copilot/
 

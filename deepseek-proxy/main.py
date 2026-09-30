@@ -213,8 +213,13 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("Proxy ready at %s", server.base_url)
 
     try:
-        # Wait for SIGINT/SIGTERM; no busy wait.
-        stop_event.wait()
+        # Poll instead of a single blocking wait: on Windows a blocking
+        # ``Event.wait()`` (native wait) is not interruptible by console
+        # control signals (Ctrl+C/SIGINT, SIGBREAK), so the signal handler
+        # would never run. A short timeout returns periodically and lets the
+        # interpreter process the pending signal (which sets ``stop_event``).
+        while not stop_event.is_set():
+            stop_event.wait(timeout=0.5)
     finally:
         server.stop()
         logger.info("Proxy stopped")
