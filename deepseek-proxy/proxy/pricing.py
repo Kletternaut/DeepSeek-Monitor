@@ -49,6 +49,8 @@ __all__ = [
     "is_peak",
     "get_tariff",
     "fetch_latest_pricing",
+    "parse_pricing_html",
+    "validate_pricing",
 ]
 
 #: Settings key under which the price table is persisted as JSON.
