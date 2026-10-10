@@ -14,10 +14,10 @@ from proxy.storage import Storage
 from proxy.usage import TokenUsage
 
 # Verifizierte Zeiten:
-#   2026-09-25 = Freitag (Werktag)
+#   2026-09-24 = Donnerstag (Werktag, kein Feiertag)
 #   Peak-Fenster (UTC): 01:00-04:00 und 06:00-10:00
-PEAK_TS = "2026-09-25T11:30:42+02:00"  # UTC 09:30 -> Peak
-OFFPEAK_TS = "2026-09-25T13:00:00+02:00"  # UTC 11:00 -> Off-Peak
+PEAK_TS = "2026-09-24T11:30:42+02:00"  # UTC 09:30 -> Peak
+OFFPEAK_TS = "2026-09-24T13:00:00+02:00"  # UTC 11:00 -> Off-Peak
 SATURDAY_TS = "2026-09-26T09:00:00+02:00"  # UTC 07:00 Sa -> Off-Peak (Wochenende)
 MONDAY_PEAK_TS = "2026-09-28T09:00:00+02:00"  # UTC 07:00 Mo -> Peak
 
@@ -28,6 +28,10 @@ class TestIsPeak:
 
     def test_offpeak_weekday(self):
         assert is_peak(OFFPEAK_TS) is False
+
+    def test_chinese_public_holiday_is_offpeak_even_in_window(self):
+        # 2026-09-25 is an official Chinese public holiday (Mid-Autumn Festival).
+        assert is_peak("2026-09-25T09:30:00+02:00") is False
 
     def test_weekend_is_offpeak_even_in_window(self):
         # Samstag 07:00 UTC liegt im Peak-Fenster, aber Wochenende -> off-peak.
