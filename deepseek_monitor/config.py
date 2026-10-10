@@ -44,6 +44,24 @@ WEEKEND_RULE_START_UTC = dt.datetime(
 )
 BJ_TZ = zoneinfo.ZoneInfo("Asia/Shanghai")
 
+# Official Chinese public-holiday periods for 2026 (State Council notice,
+# published 2025-11-04). Update this calendar when the next annual notice is
+# published. Dates are evaluated in Beijing time, not the UI display timezone.
+CHINESE_PUBLIC_HOLIDAY_RANGES_2026 = (
+    (dt.date(2026, 1, 1), dt.date(2026, 1, 3)),    # New Year
+    (dt.date(2026, 2, 15), dt.date(2026, 2, 23)),  # Spring Festival
+    (dt.date(2026, 4, 4), dt.date(2026, 4, 6)),    # Qingming
+    (dt.date(2026, 5, 1), dt.date(2026, 5, 5)),    # Labor Day
+    (dt.date(2026, 6, 19), dt.date(2026, 6, 21)),  # Dragon Boat
+    (dt.date(2026, 9, 25), dt.date(2026, 9, 27)),  # Mid-Autumn
+    (dt.date(2026, 10, 1), dt.date(2026, 10, 7)),  # National Day
+)
+CHINESE_PUBLIC_HOLIDAYS = frozenset(
+    first + dt.timedelta(days=offset)
+    for first, last in CHINESE_PUBLIC_HOLIDAY_RANGES_2026
+    for offset in range((last - first).days + 1)
+)
+
 DEFAULT_TZ = "Europe/Berlin"
 
 DEFAULT_POLL_INTERVAL_S = 20
@@ -107,7 +125,7 @@ COLOR_CARD_BORDER = "#2d2d2d"
 
 COLOR_STANDARD = "#2e7d32"
 COLOR_PEAK = "#c62828"
-COLOR_WEEKEND = "#f57c00"
+COLOR_WEEKEND = "#f57c00"\nCOLOR_HOLIDAY = "#7e57c2"
 
 COLOR_TEXT_MAIN = "#ffffff"
 COLOR_TEXT_DIM = "#78909c"
