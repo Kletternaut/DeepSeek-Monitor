@@ -125,6 +125,9 @@ def extract_usage_from_event(event: dict) -> TokenUsage | None:
         return None
     usage: Any = event.get("usage")
     if not isinstance(usage, dict):
+        message = event.get("message")
+        usage = message.get("usage") if isinstance(message, dict) else None
+    if not isinstance(usage, dict):
         return None
     return merge_usage(event, TokenUsage())
 
