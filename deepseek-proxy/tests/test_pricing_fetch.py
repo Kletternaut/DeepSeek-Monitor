@@ -24,6 +24,27 @@ def test_parse_official_table_layout():
     assert result == DEFAULT_PRICING
 
 
+def test_parser_tracks_reversed_model_columns():
+    reversed_html = PRICING_HTML.replace(
+        "<th>DeepSeek-V4.1-Flash</th><th>DeepSeek-V4-Pro</th>",
+        "<th>DeepSeek-V4-Pro</th><th>DeepSeek-V4.1-Flash</th>",
+    )
+    for first, second in (
+        ("$0.003", "$0.022"),
+        ("$0.006", "$0.044"),
+        ("$0.15", "$0.66"),
+        ("$0.30", "$1.32"),
+        ("$0.60", "$1.98"),
+        ("$1.20", "$3.96"),
+    ):
+        reversed_html = reversed_html.replace(
+            f"<td>{first}</td><td>{second}</td>",
+            f"<td>{second}</td><td>{first}</td>",
+        )
+
+    assert parse_pricing_html(reversed_html) == DEFAULT_PRICING
+
+
 def test_parser_fails_closed_for_incomplete_or_ambiguous_tables():
     assert parse_pricing_html("<html><body>pricing is changing</body></html>") is None
 
