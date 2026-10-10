@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from proxy.dashboard import add_dashboard_routes
 from proxy.labels import fingerprint_key
+from proxy.pricing import DEFAULT_PRICING
 from proxy.storage import Storage
 from proxy.usage import TokenUsage, now_iso_berlin
 
@@ -161,8 +162,6 @@ def test_pricing_get_and_set(tmp_path):
         resp = await _get(app, "/api/pricing")
         loaded = resp.json()
         assert loaded["deepseek-flash"] == custom["deepseek-flash"]
-        assert loaded["deepseek-v4-pro"] == __import__(
-            "proxy.pricing", fromlist=["DEFAULT_PRICING"]
-        ).DEFAULT_PRICING["deepseek-v4-pro"]
+        assert loaded["deepseek-v4-pro"] == DEFAULT_PRICING["deepseek-v4-pro"]
 
     asyncio.run(run())
