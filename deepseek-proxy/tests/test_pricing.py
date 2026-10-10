@@ -29,6 +29,11 @@ class TestIsPeak:
     def test_offpeak_weekday(self):
         assert is_peak(OFFPEAK_TS) is False
 
+    def test_chinese_public_holiday_is_off_peak(self):
+        # Mid-Autumn Festival: the Chinese calendar is used even though the
+        # timestamp is represented with a Berlin offset.
+        assert is_peak("2026-09-25T11:30:42+02:00") is False
+
     def test_chinese_public_holiday_is_offpeak_even_in_window(self):
         # 2026-09-25 is an official Chinese public holiday (Mid-Autumn Festival).
         assert is_peak("2026-09-25T09:30:00+02:00") is False
