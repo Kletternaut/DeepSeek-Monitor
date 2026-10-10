@@ -499,8 +499,8 @@ function renderEvents(events) {
     <th class="num">In</th><th class="num">Out</th><th class="num">Cache R</th>
     <th class="num">Cache W</th><th class="num">Cost</th></tr></thead><tbody>` +
     events.map(e => `<tr>
-      <td>${fmtTs(e.timestamp)}</td><td>${e.label}</td><td>${e.model}</td>
-      <td><span class="pill ${e.tariff}">${e.tariff}</span></td>
+      <td>${esc(fmtTs(e.timestamp))}</td><td>${esc(e.label)}</td><td>${esc(e.model)}</td>
+      <td><span class="pill ${esc(e.tariff)}">${esc(e.tariff)}</span></td>
       <td class="num">${fmtInt(e.input_tokens)}</td>
       <td class="num">${fmtInt(e.output_tokens)}</td>
       <td class="num">${fmtInt(e.cache_read_tokens)}</td>
@@ -518,10 +518,10 @@ function renderLabels(items) {
     <th>Fingerprint</th><th>Current label</th><th>New label</th><th></th>
     </tr></thead><tbody>` +
     items.map(it => `<tr>
-      <td class="fp">${it.fingerprint.slice(0, 16)}…</td>
-      <td>${it.label}</td>
-      <td><input data-fp="${it.fingerprint}" value="${it.label}"></td>
-      <td class="row-actions"><button class="ghost" data-save="${it.fingerprint}">Save</button></td>
+      <td class="fp">${esc(it.fingerprint.slice(0, 16))}…</td>
+      <td>${esc(it.label)}</td>
+      <td><input data-fp="${esc(it.fingerprint)}" value="${esc(it.label)}"></td>
+      <td class="row-actions"><button class="ghost" data-save="${esc(it.fingerprint)}">Save</button></td>
     </tr>`).join("") + `</tbody></table>`;
 
   document.querySelectorAll("button[data-save]").forEach(btn => {
