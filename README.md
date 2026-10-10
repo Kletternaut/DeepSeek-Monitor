@@ -36,10 +36,14 @@ The proxy listens locally at http://127.0.0.1:8000 by default. Configure a
 client that supports a custom Anthropic Messages-compatible base URL to use
 http://127.0.0.1:8000/anthropic as its base URL.
 
-Examples include VS Code configured for a compatible custom model endpoint
-(e.g. GitHub Copilot Chat), compatible Copilot CLI setups, and Claude Code
-configured to use DeepSeek as its model backend. Exact support depends on each
-client's ability to select a custom endpoint and model.
+Examples include VS Code with a custom model endpoint (e.g. GitHub Copilot
+Chat), GitHub Copilot CLI using its Anthropic-provider BYOK configuration, and
+Claude Code configured with a custom Anthropic Messages endpoint. Compatibility
+and tool use depend on the client and model versions; Copilot CLI's documented
+provider list names Anthropic rather than DeepSeek, and Anthropic does not
+officially support Claude Code against non-Claude models. See the configuration
+examples in [docs/INSTALLATION.md](docs/INSTALLATION.md) and the clients' own
+documentation.
 
 **Important scope distinction:** the upstream provider is DeepSeek. This is
 not a generic multi-provider router and it does not forward requests to
@@ -66,7 +70,7 @@ message level.
 
 ## Architecture
 
-\`\`\`text
+```text
 Compatible client
 (VS Code / Copilot / Claude Code)
            |
@@ -82,7 +86,7 @@ DeepSeek API Proxy  ------->  DeepSeek API
                     ^
                     |
           Monitor / dashboard
-\`\`\`
+```
 
 - SQLite is always enabled for proxy usage records.
 - InfluxDB is optional and receives usage records in addition to SQLite.
@@ -102,13 +106,13 @@ DeepSeek API Proxy  ------->  DeepSeek API
 
 Linux example:
 
-\`\`\`bash
+```bash
 git clone --branch main https://github.com/Kletternaut/DeepSeek-Monitor.git
 cd DeepSeek-Monitor/deepseek-proxy
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/python main.py
-\`\`\`
+```
 
 The proxy dashboard is then available at http://127.0.0.1:8000/.
 
