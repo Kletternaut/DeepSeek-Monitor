@@ -20,8 +20,9 @@ python3 -m venv .venv
 
 ## Tests
 
+From the repository root:
+
 ```bash
-cd deepseek-proxy
 .venv/bin/python -m pytest
 ```
 
@@ -41,4 +42,4 @@ cd deepseek-proxy
 
 ## License
 
-All contributions are subject to the [MIT license](LICENSE).
+All contributions are subject to the [MIT license](../LICENSE).
