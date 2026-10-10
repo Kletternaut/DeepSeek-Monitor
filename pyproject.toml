@@ -1,7 +1,7 @@
 [project]
-name = "deepseek-monitor"
+name = "deepseek-api-proxy"
 dynamic = ["version"]
-description = "Eigenständiges Open-Source-Tool zur Überwachung von DeepSeek-API-Kosten und -Verbrauch. Kein offizielles DeepSeek-Produkt; steht in keiner Verbindung zu DeepSeek (深度求索)."
+description = "Independent Anthropic Messages-compatible proxy for the DeepSeek API with token-usage capture, cost accounting and monitoring. Not affiliated with DeepSeek."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
