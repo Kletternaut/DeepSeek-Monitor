@@ -33,7 +33,7 @@ jobs:
         run: ruff check deepseek-proxy
 
       - name: Format check (black)
-        run: black --check deepseek-proxy
+        run: black --check --diff deepseek-proxy
 
       - name: Run tests
         run: python -m pytest
