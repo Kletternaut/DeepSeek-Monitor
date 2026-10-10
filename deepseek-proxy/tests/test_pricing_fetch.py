@@ -6,7 +6,7 @@ from proxy.pricing import DEFAULT_PRICING, parse_pricing_html
 PRICING_HTML = """\
 <html><body>
 <table>
-  <tr><th>MODEL</th><th>deepseek-flash</th><th>deepseek-v4-pro</th></tr>
+  <tr><th>MODEL</th><th>DeepSeek-V4.1-Flash</th><th>DeepSeek-V4-Pro</th></tr>
   <tr><td>PRICING</td><td>1M INPUT TOKENS (CACHE HIT)</td><td>OFF-PEAK</td><td>$0.003</td><td>$0.022</td></tr>
   <tr><td>PEAK</td><td>$0.006</td><td>$0.044</td></tr>
   <tr><td>1M INPUT TOKENS (CACHE MISS)</td><td>OFF-PEAK</td><td>$0.15</td><td>$0.66</td></tr>
