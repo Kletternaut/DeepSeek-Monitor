@@ -577,6 +577,7 @@ existing :func:`status_at` (PEAK/STANDARD/WEEKEND).
     peak_usage = 0.0
     standard_usage = 0.0
     weekend_usage = 0.0
+    holiday_usage = 0.0
 
     for event in events:
         try:
@@ -614,6 +615,7 @@ existing :func:`status_at` (PEAK/STANDARD/WEEKEND).
                 "peak_usage": 0.0,
                 "standard_usage": 0.0,
                 "weekend_usage": 0.0,
+                "holiday_usage": 0.0,
                 "avoidable_savings": 0.0,
             },
         )
@@ -635,6 +637,9 @@ existing :func:`status_at` (PEAK/STANDARD/WEEKEND).
         elif status == "WEEKEND":
             weekend_usage += amount
             row["weekend_usage"] += amount
+        elif status == "HOLIDAY":
+            holiday_usage += amount
+            row["holiday_usage"] += amount
         else:
             standard_usage += amount
             row["standard_usage"] += amount
@@ -677,6 +682,7 @@ existing :func:`status_at` (PEAK/STANDARD/WEEKEND).
                 "peak_usage": round(row["peak_usage"], 6),
                 "standard_usage": round(row["standard_usage"], 6),
                 "weekend_usage": round(row["weekend_usage"], 6),
+                "holiday_usage": round(row["holiday_usage"], 6),
                 "avoidable_savings": round(row["avoidable_savings"], 6),
                 "zone_hosts": zone_hosts,
             }
@@ -696,6 +702,7 @@ existing :func:`status_at` (PEAK/STANDARD/WEEKEND).
                 "peak_usage": 0.0,
                 "standard_usage": 0.0,
                 "weekend_usage": 0.0,
+                "holiday_usage": 0.0,
                 "avoidable_savings": 0.0,
                 "zone_hosts": {},
             }
@@ -722,6 +729,7 @@ existing :func:`status_at` (PEAK/STANDARD/WEEKEND).
         "peak_usage": round(peak_usage, 6),
         "standard_usage": round(standard_usage, 6),
         "weekend_usage": round(weekend_usage, 6),
+        "holiday_usage": round(holiday_usage, 6),
         "peak_share": peak_share,
         "avoidable_savings": round(avoidable_savings, 6),
         "daily": daily_rows,
