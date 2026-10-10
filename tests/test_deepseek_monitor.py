@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime as dt
 
 from deepseek_monitor import config
-from deepseek_monitor.analytics import _shade_hex, format_money
+from deepseek_monitor.analytics import _shade_hex, analyze_history, format_money
 from deepseek_monitor.api import currency_symbol, parse_balance
 from deepseek_monitor.tariff import calculate_status, get_rate_periods, status_at
 
@@ -75,6 +75,35 @@ def test_get_rate_periods_empty_for_inverted_interval() -> None:
     start = dt.datetime(2026, 1, 15, 12, 0, tzinfo=UTC)
     end = dt.datetime(2026, 1, 15, 0, 0, tzinfo=UTC)
     assert get_rate_periods(start, end) == []
+
+
+def test_long_rate_interval_splits_across_chinese_holidays() -> None:
+    start = dt.datetime(2026, 9, 24, 0, 0, tzinfo=UTC)
+    end = dt.datetime(2026, 10, 2, 0, 0, tzinfo=UTC)
+
+    periods = get_rate_periods(start, end)
+
+    assert periods[0][0] == start
+    assert periods[-1][1] == end
+    assert any(status == "HOLIDAY" for _, _, status in periods)
+    assert len(periods) > 10
+
+
+def test_balance_analytics_reports_chinese_holiday_consumption() -> None:
+    records = [
+        {"ts": "2026-09-24T00:00:00+00:00", "total": 100.0, "currency": "USD"},
+        {"ts": "2026-10-02T00:00:00+00:00", "total": 90.0, "currency": "USD"},
+    ]
+
+    analytics = analyze_history(
+        records,
+        tz_name="America/Los_Angeles",
+        days=60,
+        max_gap_s=1_000_000,
+    )
+
+    assert analytics["holiday_usage"] > 0
+    assert any(row["holiday_usage"] > 0 for row in analytics["daily"])
 
 
 # ---------------------------------------------------------------------------
