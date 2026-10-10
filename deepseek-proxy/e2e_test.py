@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""End-to-end test: real request THROUGH the local proxy.
+"""End-to-end test: capture and persist token usage through the local proxy.
 
-Reads the key from ~/.config/deepseek/api_key (never printed), sends the
-request to http://127.0.0.1:18999/anthropic/v1/messages and compares the
-streamed response with the direct upstream response. Then the SQLite DB is
-checked for the stored usage entry.
+The proxy must be started on port 18999 with --db pointing at the same
+temporary database used by this script. The API key is read from the local
+configuration file and is never printed.
 """
 
 import json
@@ -14,21 +13,22 @@ import sys
 import tempfile
 import urllib.request
 
-# Make the proxy modules importable (script lives in the project root).
+# Make the proxy modules importable (script lives inside deepseek-proxy/).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from proxy.paths import API_KEY_FILE  # noqa: E402
 
 KEY_FILE = API_KEY_FILE
 PROXY_URL = "http://127.0.0.1:18999/anthropic/v1/messages"
-# Deterministic temp path (works on Linux and Windows, unlike /tmp/ds_e2e.db),
-# so the separately-started proxy can be pointed at the same DB via --db.
 DB_PATH = os.path.join(tempfile.gettempdir(), "ds_e2e.db")
 
 
 def _read_key() -> str:
     with open(KEY_FILE, encoding="utf-8") as f:
-        return f.read().strip()
+        key = f.read().strip()
+    if not key:
+        raise RuntimeError(f"No API key found in {KEY_FILE}")
+    return key
 
 
 def _request(url: str) -> tuple[str, bytes]:
@@ -52,10 +52,10 @@ def _request(url: str) -> tuple[str, bytes]:
         return resp.headers.get("Content-Type", ""), resp.read()
 
 
-def _usage_from_sse(raw: bytes) -> dict:
+def _merged_usage_from_sse(raw: bytes) -> dict:
+    """Merge usage found in either documented message_start or delta shape."""
     text = raw.decode("utf-8", errors="replace")
-    # The last usage object wins (message_delta).
-    last = {}
+    merged: dict = {}
     for line in text.splitlines():
         line = line.strip()
         if not line.startswith("data:"):
@@ -64,48 +64,83 @@ def _usage_from_sse(raw: bytes) -> dict:
             obj = json.loads(line[5:].strip())
         except (ValueError, TypeError):
             continue
-        if isinstance(obj, dict) and isinstance(obj.get("usage"), dict):
-            last = obj["usage"]
-    return last
+        if not isinstance(obj, dict):
+            continue
+
+        usage = obj.get("usage")
+        if not isinstance(usage, dict):
+            message = obj.get("message")
+            usage = message.get("usage") if isinstance(message, dict) else None
+        if isinstance(usage, dict):
+            merged.update(usage)
+    return merged
+
+
+def _latest_database_id() -> int | None:
+    if not os.path.exists(DB_PATH):
+        return None
+    with sqlite3.connect(DB_PATH) as conn:
+        row = conn.execute("SELECT MAX(id) FROM usage_events").fetchone()
+    return row[0] if row and row[0] is not None else None
 
 
 def main() -> int:
-    print("== 1) Direct (upstream) ==")
+    print("== 1) Direct request to verify upstream usage format ==")
     ct_up, raw_up = _request("https://api.deepseek.com/anthropic/v1/messages")
+    usage_up = _merged_usage_from_sse(raw_up)
     print(f"    Content-Type: {ct_up}, Bytes: {len(raw_up)}")
-    usage_up = _usage_from_sse(raw_up)
-    print(f"    usage: {json.dumps(usage_up, sort_keys=True)}")
+    print(f"    Usage fields: {sorted(usage_up)}")
 
-    print("== 2) Through the proxy ==")
+    before_id = _latest_database_id()
+
+    print("== 2) Request through the proxy ==")
     ct_px, raw_px = _request(PROXY_URL)
+    usage_px = _merged_usage_from_sse(raw_px)
     print(f"    Content-Type: {ct_px}, Bytes: {len(raw_px)}")
-    usage_px = _usage_from_sse(raw_px)
-    print(f"    usage: {json.dumps(usage_px, sort_keys=True)}")
+    print(f"    Usage fields: {sorted(usage_px)}")
 
-    # 3) Comparison: the response structure (usage) must be identical.
-    #    The raw stream contains random IDs -> we only compare usage.
-    ok = usage_up == usage_px
-    print(f"== 3) usage identical: {ok} ==")
+    format_ok = (
+        "text/event-stream" in ct_up.lower()
+        and "text/event-stream" in ct_px.lower()
+        and "input_tokens" in usage_up
+        and "output_tokens" in usage_up
+        and "input_tokens" in usage_px
+        and "output_tokens" in usage_px
+    )
+    print(f"== 3) Both streams contain merged input/output usage: {format_ok} ==")
 
-    # 4) DB check: did the proxy save the usage entry?
-    print("== 4) SQLite check ==")
-    conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute(
-        "SELECT api_key_fingerprint, model, input_tokens, output_tokens, "
-        "cache_creation_tokens, cache_read_tokens, total_tokens "
-        "FROM usage_events ORDER BY id DESC LIMIT 1"
-    ).fetchall()
-    conn.close()
-    if rows:
-        fp, model, it, ot, cc, cr, tt = rows[0]
+    print("== 4) SQLite persistence check ==")
+    with sqlite3.connect(DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT id, api_key_fingerprint, model, input_tokens, output_tokens, "
+            "cache_creation_tokens, cache_read_tokens, total_tokens "
+            "FROM usage_events ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+
+    db_ok = False
+    if row:
+        entry_id, fp, model, input_tokens, output_tokens, cache_create, cache_read, total = row
+        is_new = before_id is None or entry_id > before_id
+        print(f"    New usage entry: {is_new}")
         print(f"    fingerprint={fp[:16]}… model={model}")
-        print(f"    input={it} output={ot} cache_create={cc} cache_read={cr} total={tt}")
-        match = it == usage_px.get("input_tokens") and ot == usage_px.get("output_tokens")
-        print(f"    Token values match the stream: {match}")
+        print(
+            f"    input={input_tokens} output={output_tokens} "
+            f"cache_create={cache_create} cache_read={cache_read} total={total}"
+        )
+        db_ok = (
+            is_new
+            and input_tokens == usage_px.get("input_tokens", 0)
+            and output_tokens == usage_px.get("output_tokens", 0)
+            and cache_create == usage_px.get("cache_creation_input_tokens", 0)
+            and cache_read == usage_px.get("cache_read_input_tokens", 0)
+        )
+        print(f"    Stored counts match the proxied stream: {db_ok}")
     else:
         print("    NO entry found (proxy saved nothing!)")
 
-    return 0 if ok else 1
+    success = format_ok and db_ok
+    print(f"== E2E result: {'PASS' if success else 'FAIL'} ==")
+    return 0 if success else 1
 
 
 if __name__ == "__main__":
