@@ -69,8 +69,8 @@ class TestGetTariff:
         assert flash_peak == {"cache_hit": 0.006, "cache_miss": 0.30, "output": 1.20}
         assert flash_off == {"cache_hit": 0.003, "cache_miss": 0.15, "output": 0.60}
 
-    def test_pro_model(self):
-        pro_peak = get_tariff("deepseek-v4-pro", PEAK_TS)
+    def test_pro_model_before_flash_routing_cutover(self):
+        pro_peak = get_tariff("deepseek-v4-pro", "2026-09-11T11:30:42+02:00")
         assert pro_peak == {"cache_hit": 0.044, "cache_miss": 1.32, "output": 3.96}
 
     def test_v4_pro_alias_uses_flash_rates_after_cutover(self):
@@ -152,7 +152,8 @@ class TestCostCalc:
     def test_pro_model_cost(self):
         # miss=1000, hit=0, output=500, pro peak
         # (1000*1.32 + 0 + 500*3.96)/1e6 = (1320 + 1980)/1e6 = 0.0033
-        u = self._usage(PEAK_TS, model="deepseek-v4-pro")
+        # Before 2026-09-14 04:00 UTC, the Pro model still used Pro rates.
+        u = self._usage("2026-09-11T11:30:42+02:00", model="deepseek-v4-pro")
         expected = (1000 * 1.32 + 500 * 3.96) / 1e6
         assert calc_usage_cost(u) == round(expected, 8)
 
