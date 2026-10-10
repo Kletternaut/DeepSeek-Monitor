@@ -82,6 +82,11 @@ and the full overview:
 
 ![All windows](screenshots/all.png)
 
+The proxy's web dashboard (`http://127.0.0.1:8000/`) — recorded token usage and
+the costs calculated from it:
+
+![Proxy dashboard](screenshots/proxy.png)
+
 ## Documentation
 
 | File | Content |
