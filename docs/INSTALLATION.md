@@ -34,7 +34,18 @@ DEEPSEEK_INFLUX_BUCKET=<BUCKET>
 # DEEPSEEK_INFLUX_HOST_NAME=<hostname>
 ```
 
-Without this file the proxy writes only to SQLite locally.
+The bundled systemd unit loads `influx.env` automatically. A direct invocation
+of `main.py` does **not** auto-load this file. For a manual shell start, replace
+all placeholders with real values first, then load the file explicitly:
+
+```bash
+set -a
+. ./influx.env
+set +a
+.venv/bin/python main.py
+```
+
+Without InfluxDB configuration the proxy writes only to local SQLite.
 
 ### Activate the systemd service
 
@@ -101,6 +112,11 @@ The icon files referenced by `Icon=` (`assets/deepseek-monitor-256.png` and
 separate download is needed.
 
 ## 6. Set up VS Code (custom endpoint)
+
+The proxy's upstream is DeepSeek. It can serve clients that support a custom
+Anthropic Messages-compatible base URL, including suitable VS Code / GitHub
+Copilot Chat configurations and Claude Code configured to use DeepSeek as its
+model backend. It does not forward requests to Anthropic's hosted Claude models.
 
 To make VS Code go through the local proxy, configure the file
 `~/.config/Code/User/chatLanguageModels.json` as follows. The `apiKey` remains a
