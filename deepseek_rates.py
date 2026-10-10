@@ -67,6 +67,7 @@ from deepseek_monitor.config import (
     COLOR_BG,
     COLOR_CARD,
     COLOR_CARD_BORDER,
+    COLOR_HOLIDAY,
     COLOR_NEEDLE,
     COLOR_PEAK,
     COLOR_STANDARD,
@@ -75,7 +76,6 @@ from deepseek_monitor.config import (
     COLOR_TICK_MINOR,
     COLOR_WARNING,
     COLOR_WEEKEND,
-    COLOR_HOLIDAY,
     DEFAULT_POLL_INTERVAL_S,
     DEFAULT_TZ,
     MAX_HISTORY,
@@ -2016,6 +2016,12 @@ class _LegacyDeepSeekFiligreeGUI:
                     if interval.get("gap")
                     else ""
                 )
+                status_label = {
+                    "PEAK": self.t("peak_status"),
+                    "STANDARD": self.t("standard_status"),
+                    "WEEKEND": self.t("weekend_label"),
+                    "HOLIDAY": self.t("holiday_label"),
+                }.get(part["status"], part["status"])
 
                 self.tree_intervals.insert(
                     "",
@@ -2027,7 +2033,7 @@ class _LegacyDeepSeekFiligreeGUI:
                         end.strftime(
                             "%d.%m %H:%M:%S"
                         ),
-                        part["status"],
+                        status_label,
                         format_money(
                             part["amount"],
                             currency,
