@@ -86,7 +86,16 @@ def merge_usage(obj: dict, existing: TokenUsage) -> TokenUsage:
     if not isinstance(obj, dict):
         return existing
 
+    # Anthropic Messages API puts initial usage under message_start.message.usage;
+    # later message_delta events provide usage at the top level. Prefer the
+    # top-level object when both exist, but accept both documented shapes.
+    message = obj.get("message")
+    message = message if isinstance(message, dict) else {}
     usage = obj.get("usage")
+    if not isinstance(usage, dict):
+        nested_usage = message.get("usage")
+        usage = nested_usage if isinstance(nested_usage, dict) else None
+
     if isinstance(usage, dict):
         _apply(usage, _INPUT_KEYS, existing, "input_tokens")
         _apply(usage, _OUTPUT_KEYS, existing, "output_tokens")
@@ -94,12 +103,7 @@ def merge_usage(obj: dict, existing: TokenUsage) -> TokenUsage:
         _apply(usage, _CACHE_READ_KEYS, existing, "cache_read_input_tokens")
         _apply(usage, _TOTAL_KEYS, existing, "total_tokens")
         existing.raw_usage = usage
-    else:
-        usage = None
 
-    # ``model`` can be top-level or inside the nested ``message`` object.
-    message = obj.get("message")
-    message = message if isinstance(message, dict) else {}
 
     model = obj.get("model") or message.get("model")
     if model:
