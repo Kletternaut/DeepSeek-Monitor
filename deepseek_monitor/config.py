@@ -24,7 +24,7 @@ import zoneinfo
 # ============================================================
 
 UTC = dt.timezone.utc
-APP_NAME = "DeepSeek Monitor"
+APP_NAME = "DeepSeek API Proxy Monitor"
 
 # The project version lives in a single place: ``deepseek_monitor._version``.
 from deepseek_monitor._version import __version__ as APP_VERSION
