@@ -125,6 +125,7 @@ def analyze_history(
     peak_usage = 0.0
     standard_usage = 0.0
     weekend_usage = 0.0
+    holiday_usage = 0.0
 
     currency = ""
 
@@ -214,6 +215,7 @@ def analyze_history(
                         "peak_usage": 0.0,
                         "standard_usage": 0.0,
                         "weekend_usage": 0.0,
+                        "holiday_usage": 0.0,
                         "avoidable_savings": 0.0,
                     },
                 )
@@ -237,6 +239,9 @@ def analyze_history(
                 elif status == "WEEKEND":
                     weekend_usage += amount
                     row["weekend_usage"] += amount
+                elif status == "HOLIDAY":
+                    holiday_usage += amount
+                    row["holiday_usage"] += amount
                 else:
                     standard_usage += amount
                     row["standard_usage"] += amount
@@ -277,6 +282,7 @@ def analyze_history(
                 "peak_usage": round(row["peak_usage"], 6),
                 "standard_usage": round(row["standard_usage"], 6),
                 "weekend_usage": round(row["weekend_usage"], 6),
+                "holiday_usage": round(row["holiday_usage"], 6),
                 "avoidable_savings": round(
                     row["avoidable_savings"],
                     6,
@@ -307,6 +313,7 @@ def analyze_history(
                 "peak_usage": 0.0,
                 "standard_usage": 0.0,
                 "weekend_usage": 0.0,
+                "holiday_usage": 0.0,
                 "avoidable_savings": 0.0,
             }
         daily_rows.append(row)
@@ -336,6 +343,7 @@ def analyze_history(
         "peak_usage": round(peak_usage, 6),
         "standard_usage": round(standard_usage, 6),
         "weekend_usage": round(weekend_usage, 6),
+        "holiday_usage": round(holiday_usage, 6),
         "peak_share": peak_share,
         "avoidable_savings": round(
             avoidable_savings,
