@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — API proxy and monitor review
+
+- Repositioned project documentation and package metadata around the API proxy and token-usage monitor.
+- Hardened pricing-table validation and added a conservative parser for the official DeepSeek pricing page; incomplete or ambiguous pages do not overwrite stored prices.
+- Fixed capture of usage reported in nested Anthropic `message_start.message.usage` events and expanded regression coverage.
+- Made date-only dashboard filters include the whole end date and tightened explicit date-range validation.
+- Added Chinese public-holiday classification to tariff status and usage analytics, including a dedicated color/category in the monitor and daily breakdown.
+- Added dashboard security notes and clarified supported client/protocol compatibility.
+
 ## 0.2.0 (pre-release)
 
 - **Version 0.2.0**: project version reset to a pre-release and centralized in
