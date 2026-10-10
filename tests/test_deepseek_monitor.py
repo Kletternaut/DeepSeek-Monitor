@@ -32,6 +32,20 @@ def test_status_at_standard_outside_peak() -> None:
     assert status_at(dt.datetime(2026, 1, 15, 12, 0, tzinfo=UTC)) == "STANDARD"
 
 
+def test_chinese_public_holiday_overrides_weekday_peak() -> None:
+    # 10:00 Beijing time on the Mid-Autumn holiday is off-peak, despite a peak hour.
+    assert status_at(dt.datetime(2026, 9, 25, 2, 0, tzinfo=UTC)) == "HOLIDAY"
+
+
+def test_holiday_status_has_its_own_color() -> None:
+    status_text, seconds_left, color, key = calculate_status(
+        dt.datetime(2026, 9, 25, 2, 0, tzinfo=UTC)
+    )
+    assert key == "HOLIDAY"
+    assert color == config.COLOR_HOLIDAY
+    assert "HOLIDAY" in status_text
+
+
 def test_status_at_naive_datetime_assumes_utc() -> None:
     # Naive Datetimes werden intern als UTC behandelt (kein Fehler).
     assert status_at(dt.datetime(2026, 1, 15, 2, 0)) == "PEAK"
