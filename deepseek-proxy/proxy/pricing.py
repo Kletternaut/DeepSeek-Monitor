@@ -27,6 +27,8 @@ import copy
 import json
 import logging
 import re
+from html.parser import HTMLParser
+from math import isfinite
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
@@ -80,6 +82,49 @@ def _deep_copy_default() -> dict:
     return copy.deepcopy(DEFAULT_PRICING)
 
 
+def validate_pricing(pricing: dict) -> dict:
+    """Validate and normalize a persisted or user-supplied price table."""
+    if not isinstance(pricing, dict) or not pricing:
+        raise ValueError("Pricing must be a non-empty object.")
+
+    validated: dict[str, dict] = {}
+    for model, model_data in pricing.items():
+        if model not in DEFAULT_PRICING:
+            raise ValueError(f"Unsupported pricing model: {model!r}.")
+        if not isinstance(model_data, dict):
+            raise ValueError(f"Pricing for {model!r} must be an object.")
+
+        validated_model: dict[str, dict[str, float]] = {}
+        for period in ("off_peak", "peak"):
+            period_data = model_data.get(period)
+            if not isinstance(period_data, dict):
+                raise ValueError(f"Pricing for {model!r} is missing {period!r}.")
+            validated_period: dict[str, float] = {}
+            for field in _ROW_FIELDS:
+                value = period_data.get(field)
+                if isinstance(value, bool):
+                    raise ValueError(f"{model}.{period}.{field} must be a number.")
+                try:
+                    number = float(value)
+                except (TypeError, ValueError):
+                    raise ValueError(f"{model}.{period}.{field} must be a number.") from None
+                if not isfinite(number) or number < 0:
+                    raise ValueError(
+                        f"{model}.{period}.{field} must be finite and non-negative."
+                    )
+                validated_period[field] = number
+            validated_model[period] = validated_period
+
+        for field in _ROW_FIELDS:
+            if validated_model["peak"][field] < validated_model["off_peak"][field]:
+                raise ValueError(
+                    f"{model}.{field}: peak price cannot be lower than off-peak."
+                )
+        validated[model] = validated_model
+
+    return validated
+
+
 def load_pricing(storage: Storage | None = None) -> dict:
     """Load the price table from ``storage`` (JSON) or return the defaults.
 
@@ -105,12 +150,16 @@ def load_pricing(storage: Storage | None = None) -> dict:
         logger.warning("Pricing setting is not a non-empty dict, using defaults.")
         return _deep_copy_default()
 
-    return parsed
+    try:
+        return validate_pricing(parsed)
+    except ValueError as exc:
+        logger.warning("Invalid pricing setting: %s; using defaults.", exc)
+        return _deep_copy_default()
 
 
 def save_pricing(storage: Storage, pricing: dict) -> None:
-    """Persist ``pricing`` as a JSON string under the settings key ``pricing``."""
-    storage.set_setting(PRICING_SETTING_KEY, json.dumps(pricing))
+    """Validate then persist the price table under the ``pricing`` setting."""
+    storage.set_setting(PRICING_SETTING_KEY, json.dumps(validate_pricing(pricing)))
 
 
 def normalize_model(model: str) -> str:
@@ -204,85 +253,151 @@ def get_tariff(
 
 # --------------------------------------------------------------------- fetch
 _PRICING_URL = "https://api-docs.deepseek.com/quick_start/pricing/"
-_FLASH_ROW_RE = re.compile(r"deepseek[-\s]?flash", re.IGNORECASE)
-_PRO_ROW_RE = re.compile(r"deepseek[-\s]?(v4[-\s]?pro|pro)", re.IGNORECASE)
 _AMOUNT_RE = re.compile(r"\$\s*([0-9]+(?:\.[0-9]+)?)")
 
 
-def _extract_row_amounts(text: str, start: int, end: int) -> list[float]:
-    """Extract all ``$`` amounts in the text range ``[start, end)``."""
-    chunk = text[start:end]
-    return [float(m) for m in _AMOUNT_RE.findall(chunk)]
+class _PricingTableParser(HTMLParser):
+    """Collect top-level HTML tables as rows of normalized cell text."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.tables: list[list[list[str]]] = []
+        self._table_depth = 0
+        self._table: list[list[str]] | None = None
+        self._row: list[str] | None = None
+        self._cell_parts: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag = tag.lower()
+        if tag == "table":
+            self._table_depth += 1
+            if self._table_depth == 1:
+                self._table = []
+                self.tables.append(self._table)
+            return
+        if self._table_depth != 1:
+            return
+        if tag == "tr":
+            self._row = []
+            if self._table is not None:
+                self._table.append(self._row)
+        elif tag in ("th", "td") and self._row is not None:
+            self._cell_parts = []
+
+    def handle_data(self, data: str) -> None:
+        if self._cell_parts is not None:
+            self._cell_parts.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if self._table_depth == 1:
+            if tag in ("th", "td") and self._cell_parts is not None:
+                value = " ".join(" ".join(self._cell_parts).split())
+                if self._row is not None:
+                    self._row.append(value)
+                self._cell_parts = None
+            elif tag == "tr":
+                self._row = None
+        if tag == "table" and self._table_depth:
+            self._table_depth -= 1
+            if self._table_depth == 0:
+                self._table = None
+                self._row = None
+                self._cell_parts = None
+
+
+def parse_pricing_html(html: str) -> dict | None:
+    """Parse DeepSeek's pricing matrix; return None if the layout is ambiguous."""
+    parser = _PricingTableParser()
+    try:
+        parser.feed(html)
+        parser.close()
+    except (ValueError, TypeError):
+        return None
+
+    expected_categories = {"cache_hit", "cache_miss", "output"}
+    expected_periods = {"off_peak", "peak"}
+
+    for table in parser.tables:
+        table_text = " ".join(cell for row in table for cell in row).lower()
+        if "deepseek-flash" not in table_text or "deepseek-v4-pro" not in table_text:
+            continue
+
+        current_category: str | None = None
+        prices: dict[tuple[str, str], list[float]] = {}
+
+        for row in table:
+            row_text = " ".join(row).lower()
+            if re.search(r"1m\s+input\s+tokens?\s*\(\s*cache\s+hit\s*\)", row_text):
+                current_category = "cache_hit"
+            elif re.search(r"1m\s+input\s+tokens?\s*\(\s*cache\s+miss\s*\)", row_text):
+                current_category = "cache_miss"
+            elif re.search(r"1m\s+output\s+tokens?", row_text):
+                current_category = "output"
+
+            if not current_category:
+                continue
+
+            if re.search(r"\boff[\s-]?peak\b", row_text):
+                period = "off_peak"
+            elif re.search(r"\bpeak\b", row_text):
+                period = "peak"
+            else:
+                continue
+
+            row_prices = [
+                float(match)
+                for cell in row
+                for match in _AMOUNT_RE.findall(cell)
+            ]
+            if len(row_prices) != 2 or any(
+                not isfinite(value) or value < 0 for value in row_prices
+            ):
+                continue
+            prices[(current_category, period)] = row_prices
+
+        required = {
+            (category, period)
+            for category in expected_categories
+            for period in expected_periods
+        }
+        if set(prices) != required:
+            continue
+
+        result = copy.deepcopy(DEFAULT_PRICING)
+        for category in expected_categories:
+            for period in expected_periods:
+                flash_price, pro_price = prices[(category, period)]
+                result["deepseek-flash"][period][category] = flash_price
+                result["deepseek-v4-pro"][period][category] = pro_price
+
+        try:
+            return validate_pricing(result)
+        except ValueError:
+            continue
+
+    return None
 
 
 def fetch_latest_pricing() -> dict | None:
-    """Attempt to load the current price table from the DeepSeek docs.
-
-        Best effort: the docs page is HTML and its layout can change. It is assumed
-        that six ``$`` amounts appear per model in the order ``cache_hit(off),
-        cache_miss(off), output(off), cache_hit(peak), cache_miss(peak),
-        output(peak)``. Additionally, ``peak >= off_peak`` must hold per category.
-
-        Returns:
-            The parsed table in the :data:`DEFAULT_PRICING` format, or ``None`` if
-            no safe result could be extracted. Values are NEVER guessed. The caller
-    decides (with confirmation) whether to adopt the result.
-    """
+    """Fetch official prices. Never overwrite stored prices when parsing fails."""
     from urllib.request import Request, urlopen  # locally: only load on demand
 
     try:
-        request = Request(_PRICING_URL, headers={"User-Agent": "deepseek-proxy/1.0"})
-        with urlopen(request, timeout=10) as response:  # noqa: S310 (feste URL)
+        request = Request(
+            _PRICING_URL,
+            headers={"User-Agent": "deepseek-api-proxy/1.0"},
+        )
+        with urlopen(request, timeout=10) as response:
             raw_bytes = response.read()
-    except Exception as exc:  # noqa: BLE001 - any network error → None
+    except Exception as exc:  # noqa: BLE001 - network errors are best-effort
         logger.warning("fetch_latest_pricing: fetch failed: %s", exc)
         return None
 
-    try:
-        html = raw_bytes.decode("utf-8", errors="replace")
-    except Exception:  # pragma: no cover - decode with replace practically never fails
-        return None
-
-    # Roughly remove tags to keep positional distances.
-    text = re.sub(r"<[^>]+>", " ", html)
-    text = re.sub(r"&nbsp;?", " ", text)
-
-    flash_match = _FLASH_ROW_RE.search(text)
-    pro_match = _PRO_ROW_RE.search(text)
-    if not flash_match or not pro_match:
-        logger.info("fetch_latest_pricing: model rows not found.")
-        return None
-
-    boundaries = sorted({flash_match.start(), pro_match.start(), len(text)})
-
-    def _row_amounts(pos: int) -> list[float] | None:
-        # Determine the next line boundary.
-        next_pos = len(text)
-        for b in boundaries:
-            if b > pos:
-                next_pos = b
-                break
-        amounts = _extract_row_amounts(text, pos, next_pos)
-        return amounts if len(amounts) == 6 else None
-
-    flash_amounts = _row_amounts(flash_match.start())
-    pro_amounts = _row_amounts(pro_match.start())
-    if flash_amounts is None or pro_amounts is None:
-        logger.info("fetch_latest_pricing: unexpected number of amounts per row.")
-        return None
-
-    def _build(amounts: list[float]) -> dict | None:
-        off = dict(zip(_ROW_FIELDS, amounts[:3], strict=True))
-        peak = dict(zip(_ROW_FIELDS, amounts[3:], strict=True))
-        for field in _ROW_FIELDS:
-            if peak[field] < off[field]:
-                return None
-        return {"off_peak": off, "peak": peak}
-
-    flash_entry = _build(flash_amounts)
-    pro_entry = _build(pro_amounts)
-    if flash_entry is None or pro_entry is None:
-        logger.info("fetch_latest_pricing: values not plausible (peak < off_peak).")
-        return None
-
-    return {"deepseek-flash": flash_entry, "deepseek-v4-pro": pro_entry}
+    result = parse_pricing_html(raw_bytes.decode("utf-8", errors="replace"))
+    if result is None:
+        logger.warning(
+            "fetch_latest_pricing: official pricing table could not be parsed; "
+            "stored prices remain unchanged."
+        )
+    return result
