@@ -8,8 +8,9 @@ and can be fully adjusted via persistence (:func:`load_pricing` /
 Peak/off-peak windows (UTC): 01:00–04:00 and 06:00–10:00. Weekends in Beijing
 time (``Asia/Shanghai``) count entirely as off-peak.
 
-Known limitation: Chinese public holidays are NOT handled specially (they are
-therefore incorrectly treated as peak when they fall on a weekday).
+Chinese public holidays are off-peak according to DeepSeek's published pricing
+rules. The holiday dates for 2026 are maintained in this module and must be
+updated when DeepSeek publishes the next annual calendar.
 
 Public symbols:
     * :data:`DEFAULT_PRICING`
@@ -29,7 +30,7 @@ import logging
 import re
 from html.parser import HTMLParser
 from math import isfinite
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
@@ -71,6 +72,25 @@ _FALLBACK_TARIFF = {"cache_hit": 0.003, "cache_miss": 0.15, "output": 0.60}
 _PEAK_WINDOWS_UTC: tuple[tuple[int, int], ...] = ((1 * 60, 4 * 60), (6 * 60, 10 * 60))
 
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
+
+# DeepSeek's current pricing docs exclude Chinese public holidays from peak
+# billing. 2026 dates are based on the State Council's published holiday notice;
+# update this calendar when the next year's schedule is announced.
+_CHINESE_PUBLIC_HOLIDAY_RANGES_2026 = (
+    (date(2026, 1, 1), date(2026, 1, 3)),
+    (date(2026, 2, 15), date(2026, 2, 23)),
+    (date(2026, 4, 4), date(2026, 4, 6)),
+    (date(2026, 5, 1), date(2026, 5, 5)),
+    (date(2026, 6, 19), date(2026, 6, 21)),
+    (date(2026, 9, 25), date(2026, 9, 27)),
+    (date(2026, 10, 1), date(2026, 10, 7)),
+)
+_CHINESE_PUBLIC_HOLIDAYS = frozenset(
+    start + timedelta(days=offset)
+    for first, last in _CHINESE_PUBLIC_HOLIDAY_RANGES_2026
+    for start in (first,)
+    for offset in range((last - start).days + 1)
+)
 
 #: Price fields in the order of the DeepSeek table (off-peak row, then peak
 #: row): cache_hit, cache_miss, output.
@@ -206,8 +226,9 @@ def is_peak(timestamp_iso: str) -> bool:
 
     utc_dt = dt.astimezone(timezone.utc)
 
-    # Weekend in Beijing time → always off-peak.
-    if dt.astimezone(_SHANGHAI).weekday() >= 5:
+    # Weekends and officially announced Chinese public holidays are off-peak.
+    shanghai_dt = utc_dt.astimezone(_SHANGHAI)
+    if shanghai_dt.weekday() >= 5 or shanghai_dt.date() in _CHINESE_PUBLIC_HOLIDAYS:
         return False
 
     minute_of_day = utc_dt.hour * 60 + utc_dt.minute
