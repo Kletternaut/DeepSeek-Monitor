@@ -146,9 +146,39 @@ def get_rate_periods(
         end_utc,
     }
 
-    for boundary in _all_tariff_boundaries_around(start_utc, days=2):
+    # Generate every tariff boundary across the complete interval. Restricting
+    # this to a fixed window around start_utc would misclassify long gaps that
+    # span holidays or several daily peak windows.
+    utc_day = start_utc.date() - dt.timedelta(days=1)
+    final_utc_day = end_utc.date() + dt.timedelta(days=1)
+    while utc_day <= final_utc_day:
+        for hour in (1, 4, 6, 10):
+            boundary = dt.datetime(
+                utc_day.year,
+                utc_day.month,
+                utc_day.day,
+                hour,
+                tzinfo=UTC,
+            )
+            if start_utc < boundary < end_utc:
+                boundaries.add(boundary)
+        utc_day += dt.timedelta(days=1)
+
+    beijing_day = start_utc.astimezone(BJ_TZ).date() - dt.timedelta(days=1)
+    final_beijing_day = end_utc.astimezone(BJ_TZ).date() + dt.timedelta(days=1)
+    while beijing_day <= final_beijing_day:
+        boundary = dt.datetime(
+            beijing_day.year,
+            beijing_day.month,
+            beijing_day.day,
+            tzinfo=BJ_TZ,
+        ).astimezone(UTC)
         if start_utc < boundary < end_utc:
             boundaries.add(boundary)
+        beijing_day += dt.timedelta(days=1)
+
+    if start_utc < WEEKEND_RULE_START_UTC < end_utc:
+        boundaries.add(WEEKEND_RULE_START_UTC)
 
     points = sorted(boundaries)
     periods: list[tuple[dt.datetime, dt.datetime, str]] = []
