@@ -9,7 +9,12 @@ from __future__ import annotations
 import datetime as dt
 
 from deepseek_monitor import config
-from deepseek_monitor.analytics import _shade_hex, analyze_history, format_money
+from deepseek_monitor.analytics import (
+    _shade_hex,
+    analyze_history,
+    analyze_proxy_usage,
+    format_money,
+)
 from deepseek_monitor.api import currency_symbol, parse_balance
 from deepseek_monitor.tariff import calculate_status, get_rate_periods, status_at
 
@@ -104,6 +109,26 @@ def test_balance_analytics_reports_chinese_holiday_consumption() -> None:
 
     assert analytics["holiday_usage"] > 0
     assert any(row["holiday_usage"] > 0 for row in analytics["daily"])
+
+
+def test_real_proxy_analytics_reports_chinese_holiday_costs() -> None:
+    events = [
+        {
+            "timestamp": "2026-09-25T02:00:00+00:00",
+            "cost_usd": 0.25,
+            "model": "deepseek-flash",
+        }
+    ]
+
+    analytics = analyze_proxy_usage(
+        events,
+        tz_name="America/Los_Angeles",
+        days=60,
+    )
+
+    assert analytics["holiday_usage"] == 0.25
+    assert any(row["holiday_usage"] == 0.25 for row in analytics["daily"])
+    assert analytics["peak_usage"] == 0.0
 
 
 # ---------------------------------------------------------------------------
