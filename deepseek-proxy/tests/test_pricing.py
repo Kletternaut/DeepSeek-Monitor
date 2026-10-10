@@ -73,6 +73,22 @@ class TestGetTariff:
         pro_peak = get_tariff("deepseek-v4-pro", PEAK_TS)
         assert pro_peak == {"cache_hit": 0.044, "cache_miss": 1.32, "output": 3.96}
 
+    def test_v4_pro_alias_uses_flash_rates_after_cutover(self):
+        # DeepSeek announced: 2026-09-14 04:00 UTC.
+        before = get_tariff("deepseek-v4-pro", "2026-09-14T03:59:59+00:00")
+        after = get_tariff("deepseek-v4-pro", "2026-09-14T04:00:00+00:00")
+
+        assert before == {
+            "cache_hit": 0.044,
+            "cache_miss": 1.32,
+            "output": 3.96,
+        }
+        assert after == {
+            "cache_hit": 0.003,
+            "cache_miss": 0.15,
+            "output": 0.60,
+        }
+
     def test_unknown_model_falls_back_to_flash(self):
         tariff = get_tariff("gibberish", PEAK_TS)
         assert tariff == {"cache_hit": 0.006, "cache_miss": 0.30, "output": 1.20}
