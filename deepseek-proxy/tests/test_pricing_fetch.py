@@ -1,6 +1,6 @@
 """Regression tests for the official DeepSeek pricing-page parser."""
 
-from proxy.pricing import DEFAULT_PRICING, parse_pricing_html
+from proxy import pricing
 
 
 PRICING_HTML = """\
@@ -19,9 +19,9 @@ PRICING_HTML = """\
 
 
 def test_parse_official_table_layout():
-    result = parse_pricing_html(PRICING_HTML)
+    result = pricing.parse_pricing_html(PRICING_HTML)
 
-    assert result == DEFAULT_PRICING
+    assert result == pricing.DEFAULT_PRICING
 
 
 def test_parser_tracks_reversed_model_columns():
