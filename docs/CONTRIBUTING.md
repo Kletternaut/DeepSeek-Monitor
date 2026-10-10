@@ -1,21 +1,25 @@
 # Contributing
 
-Thank you for your interest in **DeepSeek-Monitor**! This project is an
-independent open-source tool and is in no way affiliated with DeepSeek (深度求索).
+Thank you for your interest in **DeepSeek API Proxy & Token Monitor**. This is
+an independent open-source project and is not affiliated with DeepSeek
+(深度求索).
 
 ## Before you start
 
-- Read the [README.md](../README.md) and [INSTALLATION.md](INSTALLATION.md).
-- Open an issue for larger changes before investing much time.
+- Read the [project README](../README.md) and [installation guide](INSTALLATION.md).
+- Open an issue before investing significant time in a larger change.
+- Keep changes focused and include regression tests for behavior changes.
 
 ## Development environment
 
+Run these commands from the repository root:
+
 ```bash
 git clone --branch main https://github.com/Kletternaut/DeepSeek-Monitor.git
-cd DeepSeek-Monitor/deepseek-proxy
+cd DeepSeek-Monitor
 python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/pip install pytest ruff black
+.venv/bin/python -m pip install -r deepseek-proxy/requirements.txt
+.venv/bin/python -m pip install pytest ruff black
 ```
 
 ## Tests
@@ -28,18 +32,20 @@ From the repository root:
 
 ## Code style
 
-- Python 3.10+, `from __future__ import annotations`.
-- `ruff` and `black` (line length 100, see `pyproject.toml`).
-- Type hints and docstrings (rST style).
-- Tests for new logic, especially for tariff/cost calculation.
+- Python 3.10+; use `from __future__ import annotations` where appropriate.
+- Use Ruff and Black; line length is 100 (see `pyproject.toml`).
+- Prefer type hints and clear docstrings.
+- Add regression coverage for API usage parsing, pricing/cost calculation,
+  timezone/holiday boundaries, storage filters, and dashboard responses where
+  relevant.
 
 ## Pull requests
 
-1. Fork the repository and create a feature branch.
-2. Keep commits small and understandable.
-3. Keep linters + tests green (`ruff check . && black --check . && pytest`).
-4. Describe in the PR what and why.
+1. Use a feature branch and keep commits focused.
+2. Explain the user-visible behavior and any compatibility implications.
+3. Include test results and note any limitations.
+4. Do not merge a change until CI and review have passed.
 
 ## License
 
-All contributions are subject to the [MIT license](../LICENSE).
+Contributions are subject to the [MIT license](../LICENSE).
