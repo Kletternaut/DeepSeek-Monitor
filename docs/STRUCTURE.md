@@ -7,7 +7,7 @@
 
 This repository bundles two components for monitoring DeepSeek API usage:
 
-- **Proxy** (`deepseek-proxy/`) — streaming proxy between VS Code and DeepSeek, records token usage.
+- **Proxy** (`deepseek-proxy/`) — streaming Anthropic Messages API proxy for compatible clients; records token usage and powers the dashboard.
 - **Monitor** (`deepseek_rates.py` + `deepseek_monitor/`) — Tkinter app "Cost & Usage"; the pure, Tkinter-free logic lives in the `deepseek_monitor/` package.
 
 ---
@@ -28,13 +28,14 @@ This repository bundles two components for monitoring DeepSeek API usage:
 │   ├── paths.py                 # cross-platform paths (XDG on Linux, %APPDATA%/%LOCALAPPDATA% on Windows) & timezones
 │   ├── persistence.py           # persistence (timezone, language, API key, poll, Influx, history)
 │   ├── api.py                   # balance API (fetch_balance, parse_balance)
-│   ├── tariff.py                # tariff logic (peak/standard/weekend)
+│   ├── tariff.py                # tariff logic (peak/standard/weekend/Chinese holidays)
 │   └── analytics.py             # usage analysis (proxy/Influx data)
 ├── docs/                        # project documentation
 │   ├── INSTALLATION.md          # step-by-step guide: installation on additional hosts
 │   ├── WINDOWS_SETUP.md         # Windows 11: build & test the standalone .exe files
 │   ├── INFLUXDB.md              # InfluxDB 2.x integration: architecture, write/read path, downsampling
 │   ├── STRUCTURE.md             # this file: directory/file reference
+│   ├── SECURITY.md              # network binding, dashboard access and API-key safety
 │   ├── changelog.md             # change history
 │   └── CONTRIBUTING.md          # contribution guide
 ├── LICENSE                      # MIT license
@@ -86,6 +87,8 @@ This repository bundles two components for monitoring DeepSeek API usage:
         ├── test_storage.py      # SQLite persistence
         ├── test_dashboard.py    # web dashboard
         ├── test_pricing.py      # price/peak logic
+        ├── test_pricing_fetch.py # official pricing page parser and validation
+        ├── test_regression_fixes.py # usage, date filters and pricing validation
         ├── test_influx_sink.py  # InfluxDB sink
         ├── test_tray.py         # tray integration (lazy import + version)
         └── test_tkinter_view.py # Tkinter detail view
