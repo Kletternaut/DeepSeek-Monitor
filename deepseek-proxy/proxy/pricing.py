@@ -77,6 +77,28 @@ _PEAK_WINDOWS_UTC: tuple[tuple[int, int], ...] = ((1 * 60, 4 * 60), (6 * 60, 10 
 
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
 
+# DeepSeek announced that, starting 2026-09-14 04:00 UTC, requests made with
+# the legacy deepseek-v4-pro model name are routed to V4.1-Flash and billed at
+# Flash rates until V4.1-Pro launches. Preserve pre-cutover historical pricing.
+_V4_PRO_FLASH_CUTOVER = datetime(2026, 9, 14, 4, 0, tzinfo=timezone.utc)
+
+
+def _effective_model_key(model: str, timestamp_iso: str) -> str:
+    """Resolve model aliases to the rate actually billed at the request time."""
+    model_key = normalize_model(model)
+    if model_key != "deepseek-v4-pro":
+        return model_key
+    try:
+        timestamp = datetime.fromisoformat(timestamp_iso)
+    except (TypeError, ValueError):
+        return model_key
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    if timestamp.astimezone(timezone.utc) >= _V4_PRO_FLASH_CUTOVER:
+        return "deepseek-flash"
+    return model_key
+
+
 # DeepSeek's current pricing docs exclude Chinese public holidays from peak
 # billing. Keep this list in sync with deepseek_monitor/config.py. The 2026
 # dates are based on the State Council's published holiday notice;
@@ -259,7 +281,7 @@ def get_tariff(
     if the model or zone is missing or invalid.
     """
     table = pricing if pricing is not None else load_pricing()
-    model_key = normalize_model(model)
+    model_key = _effective_model_key(model, timestamp_iso)
     zone_key = _zone_key(timestamp_iso)
 
     model_entry = table.get(model_key)
