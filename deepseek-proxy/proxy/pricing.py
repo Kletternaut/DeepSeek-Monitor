@@ -136,17 +136,13 @@ def validate_pricing(pricing: dict) -> dict:
                 except (TypeError, ValueError):
                     raise ValueError(f"{model}.{period}.{field} must be a number.") from None
                 if not isfinite(number) or number < 0:
-                    raise ValueError(
-                        f"{model}.{period}.{field} must be finite and non-negative."
-                    )
+                    raise ValueError(f"{model}.{period}.{field} must be finite and non-negative.")
                 validated_period[field] = number
             validated_model[period] = validated_period
 
         for field in _ROW_FIELDS:
             if validated_model["peak"][field] < validated_model["off_peak"][field]:
-                raise ValueError(
-                    f"{model}.{field}: peak price cannot be lower than off-peak."
-                )
+                raise ValueError(f"{model}.{field}: peak price cannot be lower than off-peak.")
         validated[model] = validated_model
 
     return validated
@@ -394,11 +390,7 @@ def parse_pricing_html(html: str) -> dict | None:
             else:
                 continue
 
-            row_prices = [
-                float(match)
-                for cell in row
-                for match in _AMOUNT_RE.findall(cell)
-            ]
+            row_prices = [float(match) for cell in row for match in _AMOUNT_RE.findall(cell)]
             if len(row_prices) != 2 or any(
                 not isfinite(value) or value < 0 for value in row_prices
             ):
@@ -406,9 +398,7 @@ def parse_pricing_html(html: str) -> dict | None:
             prices[(current_category, period)] = row_prices
 
         required = {
-            (category, period)
-            for category in expected_categories
-            for period in expected_periods
+            (category, period) for category in expected_categories for period in expected_periods
         }
         if set(prices) != required:
             continue
