@@ -20,6 +20,8 @@ Public symbols:
     * :func:`is_peak`
     * :func:`get_tariff`
     * :func:`fetch_latest_pricing`
+    * :func:`parse_pricing_html`
+    * :func:`validate_pricing`
 """
 
 from __future__ import annotations
@@ -108,7 +110,9 @@ def validate_pricing(pricing: dict) -> dict:
     if not isinstance(pricing, dict) or not pricing:
         raise ValueError("Pricing must be a non-empty object.")
 
-    # A partial override should not silently price an unconfigured model at\n    # the Flash fallback rate. Retain defaults for models not explicitly edited.\n    validated: dict[str, dict] = _deep_copy_default()
+    # A partial override should not silently price an unconfigured model at
+    # the Flash fallback rate. Retain defaults for models not explicitly edited.
+    validated: dict[str, dict] = _deep_copy_default()
     for model, model_data in pricing.items():
         if model not in DEFAULT_PRICING:
             raise ValueError(f"Unsupported pricing model: {model!r}.")
@@ -341,8 +345,8 @@ def parse_pricing_html(html: str) -> dict | None:
     expected_categories = {"cache_hit", "cache_miss", "output"}
     expected_periods = {"off_peak", "peak"}
 
-    flash_pattern = re.compile(r"deepseek(?:[-\\s]?v4\\.1)?[-\\s]?flash", re.IGNORECASE)
-    pro_pattern = re.compile(r"deepseek[-\\s]?v4[-\\s]?pro", re.IGNORECASE)
+    flash_pattern = re.compile(r"deepseek(?:[- ]?v4\.1)?[- ]?flash", re.IGNORECASE)
+    pro_pattern = re.compile(r"deepseek[- ]?v4[- ]?pro", re.IGNORECASE)
 
     for table in parser.tables:
         table_text = " ".join(cell for row in table for cell in row)
