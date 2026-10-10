@@ -1,4 +1,4 @@
-# Repo overview — DeepSeek-Monitor
+# Repo overview — DeepSeek API Proxy & Token Monitor
 
 > Directory/file reference: what is where and what for.
 
@@ -52,7 +52,6 @@ This repository bundles two components for monitoring DeepSeek API usage:
 ├── tests/                       # pytest suite for deepseek_monitor (tariff, API, formatting)
 │   └── test_deepseek_monitor.py
 ├── .github/workflows/ci.yml     # CI (lint + tests, Python 3.10–3.12)
-├── deepseek_logo.png            # legacy app icon (replaced by assets/deepseek-monitor-*.png)
 ├── .env.example                 # template for app environment variables (DEEPSEEK_API_KEY, DEEPSEEK_INFLUX_*, DEEPSEEK_PROXY_URL)
 ├── .gitignore                   # exclusions (see the file itself)
 │
