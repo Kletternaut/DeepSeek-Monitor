@@ -104,7 +104,6 @@ def merge_usage(obj: dict, existing: TokenUsage) -> TokenUsage:
         _apply(usage, _TOTAL_KEYS, existing, "total_tokens")
         existing.raw_usage = usage
 
-
     model = obj.get("model") or message.get("model")
     if model:
         existing.model = str(model)
