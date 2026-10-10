@@ -207,8 +207,9 @@ def is_peak(timestamp_iso: str) -> bool:
         UTC. A timestamp without offset is assumed to be UTC. On a parse error or
         ``None``, ``False`` (off-peak) is returned.
 
-        A point in time that falls on Saturday or Sunday in Beijing time is always
-    off-peak. Chinese public holidays are not considered.
+        Weekends and the Chinese public-holiday dates currently included in the
+    maintained calendar are off-peak. Update the calendar annually from DeepSeek's
+    published rules.
     """
     if not timestamp_iso:
         return False
