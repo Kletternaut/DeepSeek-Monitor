@@ -2,7 +2,6 @@
 
 from proxy import pricing
 
-
 PRICING_HTML = """\
 <html><body>
 <table>
@@ -19,9 +18,9 @@ PRICING_HTML = """\
 
 
 def test_parse_official_table_layout():
-    result = pricing.parse_pricing_html(PRICING_HTML)
+    result = pricing.pricing.parse_pricing_html(PRICING_HTML)
 
-    assert result == pricing.DEFAULT_PRICING
+    assert result == pricing.pricing.DEFAULT_PRICING
 
 
 def test_parser_tracks_reversed_model_columns():
@@ -42,16 +41,16 @@ def test_parser_tracks_reversed_model_columns():
             f"<td>{second}</td><td>{first}</td>",
         )
 
-    assert parse_pricing_html(reversed_html) == DEFAULT_PRICING
+    assert pricing.parse_pricing_html(reversed_html) == pricing.DEFAULT_PRICING
 
 
 def test_parser_fails_closed_for_incomplete_or_ambiguous_tables():
-    assert parse_pricing_html("<html><body>pricing is changing</body></html>") is None
+    assert pricing.parse_pricing_html("<html><body>pricing is changing</body></html>") is None
 
     incomplete = PRICING_HTML.replace("<td>$3.96</td>", "<td>unknown</td>")
-    assert parse_pricing_html(incomplete) is None
+    assert pricing.parse_pricing_html(incomplete) is None
 
 
 def test_parser_does_not_accept_peak_prices_below_off_peak():
     invalid = PRICING_HTML.replace("<td>$0.006</td>", "<td>$0.001</td>")
-    assert parse_pricing_html(invalid) is None
+    assert pricing.parse_pricing_html(invalid) is None
