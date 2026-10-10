@@ -35,15 +35,9 @@ def test_extract_usage_from_nested_message_start_object():
 
 def test_calendar_date_filters_include_the_whole_end_date(tmp_path):
     storage = Storage(str(tmp_path / "usage.db"))
-    storage.save_usage(
-        TokenUsage(timestamp="2026-09-25T00:01:00+02:00", input_tokens=10)
-    )
-    storage.save_usage(
-        TokenUsage(timestamp="2026-09-25T23:59:59+02:00", input_tokens=20)
-    )
-    storage.save_usage(
-        TokenUsage(timestamp="2026-09-26T00:00:00+02:00", input_tokens=30)
-    )
+    storage.save_usage(TokenUsage(timestamp="2026-09-25T00:01:00+02:00", input_tokens=10))
+    storage.save_usage(TokenUsage(timestamp="2026-09-25T23:59:59+02:00", input_tokens=20))
+    storage.save_usage(TokenUsage(timestamp="2026-09-26T00:00:00+02:00", input_tokens=30))
 
     rows = storage.get_usage(start="2026-09-25", end="2026-09-25")
 
@@ -76,9 +70,7 @@ def test_dashboard_summary_uses_explicit_date_range(tmp_path):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
-            response = await client.get(
-                "/api/summary?start=2026-09-25&end=2026-09-25"
-            )
+            response = await client.get("/api/summary?start=2026-09-25&end=2026-09-25")
 
         assert response.status_code == 200
         payload = response.json()
