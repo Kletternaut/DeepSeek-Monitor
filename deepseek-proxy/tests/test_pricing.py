@@ -87,7 +87,9 @@ class TestPricingPersistence:
             }
         }
         save_pricing(s, custom)
-        assert load_pricing(s) == custom
+        expected = dict(DEFAULT_PRICING)
+        expected["deepseek-flash"] = custom["deepseek-flash"]
+        assert load_pricing(s) == expected
 
     def test_invalid_json_falls_back_to_defaults(self, tmp_path):
         s = Storage(str(tmp_path / "test.db"))
