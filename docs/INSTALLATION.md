@@ -164,6 +164,42 @@ real key.
 
 After the change, reload VS Code (Reload Window).
 
+## GitHub Copilot CLI (BYOK, Anthropic protocol)
+
+The proxy exposes `/v1/messages` as an alias, so a client that sends the
+Anthropic Messages protocol can use the proxy root URL. For a recent Copilot
+CLI version whose BYOK provider configuration supports Anthropic Messages:
+
+```bash
+export COPILOT_PROVIDER_TYPE=anthropic
+export COPILOT_PROVIDER_BASE_URL=http://127.0.0.1:8000
+export COPILOT_PROVIDER_API_KEY='YOUR_DEEPSEEK_API_KEY'
+export COPILOT_MODEL=deepseek-flash
+copilot
+```
+
+GitHub's documented provider list names Anthropic (Claude models), not DeepSeek.
+This is therefore a protocol-compatibility setup, not an officially documented
+DeepSeek/Copilot pairing. Verify streaming and tool calling with your installed
+CLI version. See the [Copilot CLI BYOK documentation](https://docs.github.com/en/enterprise-cloud@latest/copilot/how-tos/copilot-cli/customize-copilot/use-byok-models).
+
+## Claude Code
+
+Claude Code can be configured with an Anthropic Messages-compatible custom base
+URL, but Anthropic explicitly does not support routing Claude Code to non-Claude
+models. The following is an experimental compatibility configuration: Claude
+Code requests would be sent to **DeepSeek**, not to Anthropic-hosted Claude.
+
+```bash
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8000/anthropic
+export ANTHROPIC_API_KEY='YOUR_DEEPSEEK_API_KEY'
+claude --model deepseek-flash
+```
+
+Check that your Claude Code version accepts the configured model and that its
+requested features are supported by DeepSeek's Anthropic-compatible API. See
+[Claude Code's gateway documentation](https://code.claude.com/docs/en/llm-gateway).
+
 ---
 
 ## Windows (Win11 / 25H2)
