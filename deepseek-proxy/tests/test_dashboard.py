@@ -58,9 +58,9 @@ def _seed(storage):
     )
 
 
-def test_index_returns_html():
+def test_index_returns_html(tmp_path):
     async def run():
-        storage = Storage()  # temporary default path is fine for this test
+        storage = Storage(str(tmp_path / "dashboard-index.db"))
         app = _make_app(storage)
         resp = await _get(app, "/")
         assert resp.status_code == 200
@@ -159,6 +159,10 @@ def test_pricing_get_and_set(tmp_path):
         assert resp.json() == {"ok": True}
 
         resp = await _get(app, "/api/pricing")
-        assert resp.json() == custom
+        loaded = resp.json()
+        assert loaded["deepseek-flash"] == custom["deepseek-flash"]
+        assert loaded["deepseek-v4-pro"] == __import__(
+            "proxy.pricing", fromlist=["DEFAULT_PRICING"]
+        ).DEFAULT_PRICING["deepseek-v4-pro"]
 
     asyncio.run(run())
