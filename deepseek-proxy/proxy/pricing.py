@@ -28,9 +28,9 @@ import copy
 import json
 import logging
 import re
+from datetime import date, datetime, timedelta, timezone
 from html.parser import HTMLParser
 from math import isfinite
-from datetime import date, datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
@@ -74,7 +74,8 @@ _PEAK_WINDOWS_UTC: tuple[tuple[int, int], ...] = ((1 * 60, 4 * 60), (6 * 60, 10 
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 # DeepSeek's current pricing docs exclude Chinese public holidays from peak
-# billing. 2026 dates are based on the State Council's published holiday notice;
+# billing. Keep this list in sync with deepseek_monitor/config.py. The 2026
+# dates are based on the State Council's published holiday notice;
 # update this calendar when the next year's schedule is announced.
 _CHINESE_PUBLIC_HOLIDAY_RANGES_2026 = (
     (date(2026, 1, 1), date(2026, 1, 3)),
@@ -107,7 +108,7 @@ def validate_pricing(pricing: dict) -> dict:
     if not isinstance(pricing, dict) or not pricing:
         raise ValueError("Pricing must be a non-empty object.")
 
-    validated: dict[str, dict] = {}
+    # A partial override should not silently price an unconfigured model at\n    # the Flash fallback rate. Retain defaults for models not explicitly edited.\n    validated: dict[str, dict] = _deep_copy_default()
     for model, model_data in pricing.items():
         if model not in DEFAULT_PRICING:
             raise ValueError(f"Unsupported pricing model: {model!r}.")
@@ -340,9 +341,29 @@ def parse_pricing_html(html: str) -> dict | None:
     expected_categories = {"cache_hit", "cache_miss", "output"}
     expected_periods = {"off_peak", "peak"}
 
+    flash_pattern = re.compile(r"deepseek(?:[-\\s]?v4\\.1)?[-\\s]?flash", re.IGNORECASE)
+    pro_pattern = re.compile(r"deepseek[-\\s]?v4[-\\s]?pro", re.IGNORECASE)
+
     for table in parser.tables:
-        table_text = " ".join(cell for row in table for cell in row).lower()
-        if "deepseek-flash" not in table_text or "deepseek-v4-pro" not in table_text:
+        table_text = " ".join(cell for row in table for cell in row)
+        if not flash_pattern.search(table_text) or not pro_pattern.search(table_text):
+            continue
+
+        # The price cells correspond to model columns. Detect their order from
+        # the header row rather than assuming Flash is always listed first.
+        model_order: list[str] | None = None
+        for row in table:
+            model_cells: list[tuple[int, str]] = []
+            for index, cell in enumerate(row):
+                if flash_pattern.search(cell):
+                    model_cells.append((index, "deepseek-flash"))
+                if pro_pattern.search(cell):
+                    model_cells.append((index, "deepseek-v4-pro"))
+            ordered = [name for _, name in sorted(model_cells)]
+            if len(ordered) == 2 and set(ordered) == {"deepseek-flash", "deepseek-v4-pro"}:
+                model_order = ordered
+                break
+        if model_order is None:
             continue
 
         current_category: str | None = None
@@ -389,9 +410,9 @@ def parse_pricing_html(html: str) -> dict | None:
         result = copy.deepcopy(DEFAULT_PRICING)
         for category in expected_categories:
             for period in expected_periods:
-                flash_price, pro_price = prices[(category, period)]
-                result["deepseek-flash"][period][category] = flash_price
-                result["deepseek-v4-pro"][period][category] = pro_price
+                row_prices = prices[(category, period)]
+                for model_name, price in zip(model_order, row_prices, strict=True):
+                    result[model_name][period][category] = price
 
         try:
             return validate_pricing(result)
