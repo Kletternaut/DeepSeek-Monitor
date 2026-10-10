@@ -18,6 +18,7 @@ import datetime as dt
 
 from deepseek_monitor.config import (
     BJ_TZ,
+    CHINESE_PUBLIC_HOLIDAYS,
     PEAK_WINDOWS_UTC,
     STATUS_COLORS,
     UTC,
@@ -27,13 +28,19 @@ from deepseek_monitor.config import (
 
 def status_at(now_utc: dt.datetime) -> str:
     """
-    Return STANDARD, PEAK or WEEKEND.
-    The status is derivable from UTC time + the Beijing weekend rule alone.
+    Return STANDARD, PEAK, WEEKEND or HOLIDAY.
+    Holiday/weekend classification follows the provider's Beijing-time rules.
     """
     if now_utc.tzinfo is None:
         now_utc = now_utc.replace(tzinfo=UTC)
 
     bj_now = now_utc.astimezone(BJ_TZ)
+
+    # Provider billing rules follow the Chinese calendar. This decision is
+    # always made in Beijing time; the UI converts the resulting UTC boundary
+    # to whichever display timezone the user selected.
+    if bj_now.date() in CHINESE_PUBLIC_HOLIDAYS:
+        return "HOLIDAY"
 
     if (
         now_utc >= WEEKEND_RULE_START_UTC
@@ -190,10 +197,9 @@ def calculate_status(
         (next_change - now_utc).total_seconds(),
     )
 
-    text = (
-        "WEEKEND OFF-PEAK"
-        if key == "WEEKEND"
-        else key
-    )
+    text = {
+        "WEEKEND": "WEEKEND OFF-PEAK",
+        "HOLIDAY": "CHINESE HOLIDAY OFF-PEAK",
+    }.get(key, key)
 
     return text, seconds_left, STATUS_COLORS[key], key
