@@ -83,6 +83,10 @@ Use the settings window to tailor the monitor to your workflow. The display time
 
 The proxy is the technical foundation for detailed usage capture. It forwards compatible Anthropic Messages requests to **DeepSeek** and streams the responses back to the client.
 
+![DeepSeek API proxy dashboard](screenshots/proxy.png)
+
+*The proxy dashboard displays captured token usage and the costs calculated from the reported usage.*
+
 By default, the proxy listens locally at:
 
 - Dashboard: `http://127.0.0.1:8000/`
@@ -140,10 +144,6 @@ DeepSeek API Proxy  ------->  DeepSeek API
 ## Screenshots
 
 ![All monitor windows](screenshots/all.png)
-
-The proxy's web dashboard shows captured token usage and the costs calculated from it:
-
-![Proxy dashboard](screenshots/proxy.png)
 
 ## Quick start
 
