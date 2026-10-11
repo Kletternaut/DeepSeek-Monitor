@@ -2577,16 +2577,16 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
                     font=("Segoe UI", 6),
                 )
 
-        # Current point in time: subtle small yellow triangle.
+        # Current point in time: white triangle marker.
         local_minutes = local_now.hour * 60 + local_now.minute
         needle_x = left + local_minutes / (24 * 60) * usable
-        marker_y = 3
-        marker_half = 3
+        marker_y = 12
+        marker_half = 6
         c.create_polygon(
             needle_x, marker_y,
-            needle_x - marker_half, marker_y - 5,
-            needle_x + marker_half, marker_y - 5,
-            fill="#f4c542",
+            needle_x - marker_half, marker_y - 12,
+            needle_x + marker_half, marker_y - 12,
+            fill=COLOR_NEEDLE,
             outline="",
         )
 
