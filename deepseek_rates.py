@@ -2738,6 +2738,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
             (COLOR_PEAK, "Peak"),
             (COLOR_STANDARD, self.t("normal")),
             (COLOR_WEEKEND, self.t("weekend_label")),
+            (COLOR_HOLIDAY, self.t("holiday_label")),
         ):
             swatch = tk.Canvas(
                 legend_inner, width=10, height=10,
@@ -3641,7 +3642,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
         # host darkens its base color by 5% (index across all hosts).
         # Stack order: STANDARD (bottom) → WEEKEND → PEAK (top).
         zone_colors = STATUS_COLORS
-        zone_order = ("STANDARD", "WEEKEND", "PEAK")
+        zone_order = ("STANDARD", "WEEKEND", "HOLIDAY", "PEAK")
 
         has_segments = any(r.get("zone_hosts") for r in data)
         host_index: dict[str, int] = {}
@@ -3675,6 +3676,7 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
                 segments = [
                     (float(row["standard_usage"]), COLOR_STANDARD, None, "STANDARD"),
                     (float(row["weekend_usage"]), COLOR_WEEKEND, None, "WEEKEND"),
+                    (float(row.get("holiday_usage", 0.0)), COLOR_HOLIDAY, None, "HOLIDAY"),
                     (float(row["peak_usage"]), COLOR_PEAK, None, "PEAK"),
                 ]
 
@@ -3750,11 +3752,13 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
             peak = self._analytics.get("peak_usage", 0.0)
             normal = self._analytics.get("standard_usage", 0.0)
             weekend = self._analytics.get("weekend_usage", 0.0)
+            holiday = self._analytics.get("holiday_usage", 0.0)
             if total > 0:
                 text = (
                     f"Peak {peak/total*100:.1f}%   "
                     f"Normal {normal/total*100:.1f}%   "
-                    f"WE {weekend/total*100:.1f}%"
+                    f"WE {weekend/total*100:.1f}%   "
+                    f"Holiday {holiday/total*100:.1f}%"
                 )
                 canvas.create_text(
                     width-right, 12, anchor="ne",
