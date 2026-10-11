@@ -42,6 +42,8 @@ Features include:
 
 The tariff calculation and the display timezone are separate concerns. Tariff rules use configured UTC time windows and the date in the **Asia/Shanghai** timezone. Weekends and Chinese public holidays in the calendar currently maintained in the code are treated as off-peak. The calendar currently covers 2026 and must be updated for subsequent years.
 
+> **Important — verify tariff times before relying on the monitor.** Correctly mapping Peak/Off-peak windows, weekend boundaries and Chinese public holidays to a user's local timezone is complex, especially across European standard-time/daylight-saving-time changes. DeepSeek may also change its billing rules, and the holiday calendar is maintained in code. **Before using this monitor to plan paid API work, you must independently verify that the initially displayed zones and their start/end times match DeepSeek's current official pricing schedule.** Repeat the check after application updates, timezone or daylight-saving-time changes, annual holiday-calendar updates, and DeepSeek pricing-policy changes. The monitor is a planning aid, not an authoritative billing source. Read the [Tariff Accuracy, Verification and Liability Disclaimer](docs/DISCLAIMER.md).
+
 ## Token usage and API cost analytics
 
 The proxy captures usage fields reported by DeepSeek in API responses, including streamed Server-Sent Events (SSE). It merges these fields into request records and calculates costs using the configured price table.
@@ -184,6 +186,7 @@ See [docs/SECURITY.md](docs/SECURITY.md) for further notes.
 | File | Contents |
 |---|---|
 | [docs/INSTALLATION.md](docs/INSTALLATION.md) | Installation, client configuration, systemd and Windows |
+| [docs/DISCLAIMER.md](docs/DISCLAIMER.md) | Tariff accuracy, required user verification and liability disclaimer |
 | [docs/WINDOWS_SETUP.md](docs/WINDOWS_SETUP.md) | Windows builds and tests for `.exe` files |
 | [docs/INFLUXDB.md](docs/INFLUXDB.md) | InfluxDB integration and multi-host reporting |
 | [docs/STRUCTURE.md](docs/STRUCTURE.md) | Repository directory and file reference |
