@@ -46,6 +46,10 @@ The tariff calculation and the display timezone are separate concerns. Tariff ru
 
 The proxy captures usage fields reported by DeepSeek in API responses, including streamed Server-Sent Events (SSE). It merges these fields into request records and calculates costs using the configured price table.
 
+![DeepSeek-Monitor Cost & Usage analytics](screenshots/costs-usage.png)
+
+*The Cost & Usage view turns API-reported token usage into request-level and period-based cost breakdowns.*
+
 The analytics can show, among other things:
 
 - input and output tokens
@@ -66,6 +70,14 @@ Cost calculations depend on the captured usage fields and the price table config
 - **API-key fingerprint:** the usage database stores a fingerprint for grouping requests, not the plaintext of the API key supplied by the client.
 
 The desktop monitor can use local proxy/SQLite data or a configured InfluxDB data source. Account balance monitoring is a separate feature and should not be confused with request-level cost analytics.
+
+## Settings and configuration
+
+Use the settings window to tailor the monitor to your workflow. The display timezone can be configured independently of the billing-time calculations, and the analytics data source can be set to local proxy/SQLite data or a configured InfluxDB instance.
+
+![DeepSeek-Monitor settings](screenshots/settings.png)
+
+*The settings window brings monitor preferences and analytics data-source configuration together.*
 
 ## API proxy and client compatibility
 
@@ -126,10 +138,6 @@ DeepSeek API Proxy  ------->  DeepSeek API
 - The proxy does not store the client-supplied API key in plaintext in the usage database.
 
 ## Screenshots
-
-| Main monitor | Cost & Usage | Settings |
-|---|---|---|
-| ![Main monitor](screenshots/main.png) | ![Cost and usage](screenshots/costs-usage.png) | ![Settings](screenshots/settings.png) |
 
 ![All monitor windows](screenshots/all.png)
 
