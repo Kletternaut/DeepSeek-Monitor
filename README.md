@@ -1,136 +1,136 @@
 # DeepSeek-Monitor
 
-**Token-Usage-Analyse, API-Kostentracking und Echtzeit-Tarifmonitoring für DeepSeek — für BYOK-Workflows und darüber hinaus.**
+**DeepSeek token usage analytics, API cost tracking and real-time pricing monitoring — for BYOK workflows and beyond.**
 
-Wer DeepSeek mit einem eigenen API-Schlüssel (Bring Your Own Key, BYOK) über Entwicklungswerkzeuge wie VS Code mit GitHub Copilot Chat nutzt, möchte nachvollziehen können, wie viele Tokens verbraucht werden und welche API-Kosten daraus entstehen. Diese Informationen sind im jeweiligen Client nicht immer zentral oder ausreichend detailliert sichtbar.
+When using DeepSeek with your own API key (Bring Your Own Key, BYOK) through development tools such as VS Code with GitHub Copilot Chat, it can be difficult to get a consolidated view of token consumption and resulting API costs directly in the client.
 
-**DeepSeek-Monitor macht Nutzung und Kosten nachvollziehbar.** Das Projekt verbindet einen Echtzeit-Tarifmonitor mit einer detaillierten Analyse erfasster Token-Nutzung. Ein API-Proxy stellt dafür die von DeepSeek gemeldeten Usage-Daten bereit.
+**DeepSeek-Monitor makes usage and costs visible.** It combines a real-time pricing monitor with detailed analytics for recorded token usage. An API proxy provides the usage data reported by DeepSeek for this analysis.
 
-Das Projekt ist unabhängig und Open Source. Es ist nicht mit DeepSeek (深度求索) verbunden und wird weder von DeepSeek entwickelt noch gesponsert, unterstützt oder betrieben.
+This is an independent open-source project. It is not affiliated with, developed, sponsored, endorsed, or operated by DeepSeek (深度求索).
 
-## Funktionen im Überblick
+## Features at a glance
 
-- **Echtzeit-Tarifmonitor:** Zeigt die aktuelle DeepSeek-Tarifzone, den zugehörigen Multiplikator und die verbleibende Zeit bis zum nächsten Zonenwechsel.
-- **Token- und Kostenanalyse:** Zeigt erfasste Token-Nutzung, berechnete API-Kosten, Tagesübersichten und Details einzelner Requests.
-- **API-Proxy:** Leitet kompatible Client-Anfragen an die DeepSeek API weiter und erfasst Usage-Daten aus den API-Antworten.
-- **Flexible Datenspeicherung:** SQLite speichert Usage-Daten lokal; optional kann InfluxDB 2.x zusätzlich für eine zentrale, hostübergreifende Auswertung verwendet werden.
-- **Kontostandsüberwachung:** Ein separates Desktop-Fenster überwacht den DeepSeek-API-Kontostand.
+- **Real-time pricing monitor:** See the current DeepSeek pricing zone, its applicable multiplier and the time remaining until the next zone change.
+- **Token usage and cost analytics:** Review recorded token consumption, calculated API costs, daily totals and individual request details.
+- **API proxy:** Forward compatible client requests to the DeepSeek API and capture usage data reported in API responses.
+- **Flexible storage:** SQLite stores usage data locally; InfluxDB 2.x can optionally be used for centralized, multi-host reporting.
+- **Account balance monitoring:** A separate desktop window monitors the DeepSeek API account balance.
 
-Die Kostenwerte werden aus den von der API gemeldeten Usage-Daten und der konfigurierten Preistabelle berechnet. Prüfe die Preistabelle und beachte die Hinweise zu historischen Preisen sowie zum jährlich zu aktualisierenden chinesischen Feiertagskalender, bevor du die Werte als Finanznachweis verwendest.
+Cost figures are calculated from the usage data reported by the API and the configured price table. Check the configured prices and note the limitations around historical pricing and the Chinese public-holiday calendar before treating these figures as financial records.
 
-## Echtzeit-Tarifmonitor
+## Real-time pricing monitor
 
-Der Desktop-Monitor zeigt den aktuellen Tarifstatus und den zeitlichen Verlauf der Tarifzonen. Zu den Funktionen gehören:
+The desktop monitor displays the current tariff status and a timeline of pricing zones. Features include:
 
-- aktuelle Tarifzone und deren Multiplikator
-- Countdown bis zum nächsten Tarifwechsel
-- zeitliche Übersicht der Tarifzonen
-- konfigurierbare Zeitzone für die Anzeige
-- optionale akustische Warnung vor einem Tarifwechsel
-- Überwachung des DeepSeek-API-Kontostands
+- current pricing zone and its multiplier
+- countdown until the next zone change
+- timeline showing pricing zones over time
+- configurable display timezone
+- optional audible warning before a tariff change
+- DeepSeek API account balance monitoring
 
-Die Tarifberechnung und die Anzeigezeitzone sind getrennte Dinge: Die Tarifregeln werden anhand der dafür vorgesehenen UTC-Zeitfenster sowie des Datums in der Zeitzone **Asia/Shanghai** ausgewertet. Wochenenden und die im Code hinterlegten chinesischen gesetzlichen Feiertage werden als Off-Peak behandelt. Der Feiertagskalender ist derzeit für 2026 hinterlegt und muss für Folgejahre aktualisiert werden.
+The tariff calculation and the display timezone are separate concerns. Tariff rules are evaluated using the configured UTC time windows and the date in the **Asia/Shanghai** timezone. Weekends and Chinese public holidays in the calendar currently maintained in the code are treated as off-peak. The calendar currently covers 2026 and must be updated for subsequent years.
 
-## Token-Nutzung und API-Kosten
+## Token usage and API cost analytics
 
-Der Proxy erfasst Usage-Felder, die DeepSeek in den API-Antworten meldet, einschließlich gestreamter Server-Sent Events (SSE). Die erfassten Daten werden zu Request-Datensätzen zusammengeführt und anhand der konfigurierten Preistabelle bepreist.
+The proxy captures usage fields reported by DeepSeek in API responses, including streamed Server-Sent Events (SSE). It merges these fields into request records and calculates costs using the configured price table.
 
-Die Analyse kann unter anderem Folgendes darstellen:
+The analytics can show, among other things:
 
-- Input- und Output-Tokens
-- gemeldete Cache-Hit- und Cache-Miss-Tokens
-- berechnete Kosten pro Request und für ausgewählte Zeiträume
-- Tarifzone und angewendete Preiskategorie
-- Request-Details und Tagesübersichten
-- optionale zentrale Auswertung mehrerer Hosts über InfluxDB 2.x
+- input and output tokens
+- reported cache-hit and cache-miss tokens
+- calculated costs per request and over selected periods
+- tariff zone and applied pricing category
+- request details and daily summaries
+- optional centralized, multi-host reporting through InfluxDB 2.x
 
-**Wichtig:** DeepSeek-Monitor tokenisiert Prompt- oder Antworttexte nicht selbst. Die Usage-Erfassung basiert auf den Token-Angaben, die der API-Stream tatsächlich liefert. Wenn die API bestimmte Felder nicht meldet, können diese Werte nicht unabhängig aus dem Text rekonstruiert werden.
+**Important:** DeepSeek-Monitor does not tokenize prompt or response text itself. Usage tracking relies on token counts actually reported by the API stream. If the API does not report a field, the monitor cannot independently reconstruct that value from the text.
 
-Die Kostenberechnung hängt von den erfassten Usage-Feldern und der im Proxy konfigurierten Preistabelle ab. Die Preistabelle kann aktualisiert werden; historische Requests sind daher nicht automatisch ein revisionssicherer Nachweis der zu einem früheren Zeitpunkt geltenden Preise.
+Cost calculations depend on the captured usage fields and the price table configured in the proxy. The price table can be updated, so historical requests are not automatically an audit-grade record of the prices that applied at the time.
 
-### Speicherung
+### Data storage
 
-- **SQLite:** lokale Speicherung der Proxy-Usage-Daten; immer aktiv.
-- **InfluxDB 2.x (optional):** zusätzliche zentrale Speicherung für hostübergreifende Auswertungen.
-- **API-Key-Fingerabdruck:** In der Usage-Datenbank wird ein Fingerabdruck zum Gruppieren von Requests gespeichert, nicht der Klartext des vom Client übermittelten API-Schlüssels.
+- **SQLite:** local storage for proxy usage records; always enabled.
+- **InfluxDB 2.x (optional):** additional centralized storage for multi-host reporting.
+- **API-key fingerprint:** the usage database stores a fingerprint for grouping requests, not the plaintext of the API key supplied by the client.
 
-Der Desktop-Monitor kann lokale Proxy-/SQLite-Daten oder eine konfigurierte InfluxDB-Datenquelle verwenden. Die Überwachung des Kontostands bleibt eine separate Funktion und ist nicht mit der requestbasierten Kostenanalyse gleichzusetzen.
+The desktop monitor can use local proxy/SQLite data or a configured InfluxDB data source. Account balance monitoring is a separate feature and should not be confused with request-level cost analytics.
 
-## API-Proxy und Client-Kompatibilität
+## API proxy and client compatibility
 
-Der Proxy ist die technische Grundlage für die detaillierte Usage-Erfassung. Er leitet kompatible Anthropic-Messages-Anfragen an **DeepSeek** weiter und streamt die Antworten zum Client zurück.
+The proxy is the technical foundation for detailed usage capture. It forwards compatible Anthropic Messages requests to **DeepSeek** and streams the responses back to the client.
 
-Standardmäßig lauscht der Proxy lokal unter:
+By default, the proxy listens locally at:
 
 - Dashboard: `http://127.0.0.1:8000/`
-- Anthropic-Messages-Basis-URL: `http://127.0.0.1:8000/anthropic`
-- Endpunkte: `/anthropic/v1/messages` und `/v1/messages` (Alias)
+- Anthropic Messages base URL: `http://127.0.0.1:8000/anthropic`
+- Endpoints: `/anthropic/v1/messages` and `/v1/messages` (alias)
 
-Ein Client muss einen benutzerdefinierten Anthropic-Messages-kompatiblen Endpunkt unterstützen. Beispiele und Konfigurationshinweise findest du in der [Installationsanleitung](docs/INSTALLATION.md).
+A client must support a custom Anthropic Messages-compatible endpoint. Configuration examples and further notes are available in the [installation guide](docs/INSTALLATION.md).
 
-Mögliche Einsatzszenarien sind:
+Possible use cases include:
 
-- **VS Code mit GitHub Copilot Chat:** benutzerdefinierter Modell-Endpunkt, sofern die verwendete VS-Code-Version und Konfiguration das gewünschte Modellprotokoll unterstützen.
-- **GitHub Copilot CLI:** experimentelle BYOK-Konfiguration über den Anthropic-Provider. GitHubs dokumentierte Provider-Liste nennt Anthropic, nicht DeepSeek; Streaming und Tool-Aufrufe müssen mit der eingesetzten CLI-Version geprüft werden.
-- **Claude Code:** experimentelle Konfiguration eines benutzerdefinierten Anthropic-Messages-Endpunkts. Anthropic unterstützt Claude Code offiziell nicht für die Verwendung mit Nicht-Claude-Modellen; der Upstream in dieser Konfiguration ist DeepSeek.
+- **VS Code with GitHub Copilot Chat:** a custom model endpoint, provided the VS Code version and configuration support the required model protocol.
+- **GitHub Copilot CLI:** an experimental BYOK configuration using the Anthropic provider. GitHub's documented provider list names Anthropic, not DeepSeek; streaming and tool calls should be tested with the CLI version in use.
+- **Claude Code:** an experimental configuration using a custom Anthropic Messages endpoint. Anthropic does not officially support Claude Code with non-Claude models; in this configuration, requests go to DeepSeek.
 
-Dies sind Kompatibilitätskonfigurationen, keine pauschale Garantie für alle Versionen, Modelle oder Funktionen. Insbesondere Tool-Aufrufe, Reasoning-/Thinking-Funktionen und weitere protokollspezifische Features hängen vom Client und vom jeweiligen DeepSeek-Modell ab.
+These are compatibility configurations, not a blanket guarantee that every version, model or feature will work. Tool calls, reasoning/thinking features and other protocol-specific capabilities depend on the client and the DeepSeek model being used.
 
-**Abgrenzung:** Der Upstream-Provider ist DeepSeek. Der Proxy ist kein generischer Multi-Provider-Router und leitet Anfragen nicht an Anthropics gehostete Claude-Modelle weiter.
+**Scope:** DeepSeek is the upstream provider. This is not a generic multi-provider router and it does not forward requests to Anthropic's hosted Claude models.
 
-Der Proxy leitet Request- und Response-Bodies ohne Dekodierung und erneute Kodierung weiter. HTTP-Transport-Header werden bei Bedarf gefiltert oder neu erzeugt; daher ist der Proxy nicht auf Ebene der vollständigen HTTP-Nachricht bytegenau transparent.
+The proxy forwards request and response bodies without decoding and re-encoding them. HTTP transport headers may be filtered or regenerated as needed, so the proxy is not byte-for-byte transparent at the level of the complete HTTP message.
 
-## Komponenten
+## Components
 
-| Komponente | Pfad | Zweck |
+| Component | Path | Purpose |
 |---|---|---|
-| API-Proxy | `deepseek-proxy/` | DeepSeek-Upstream, Streaming-Usage-Erfassung, Dashboard und Speicherung |
-| Desktop-Monitor | `deepseek_rates.py` | Tkinter-Oberfläche für Tarifmonitor, Kontostand und Kosten-/Usage-Analyse |
-| Monitor-Logik | `deepseek_monitor/` | Tarifberechnung, Konfiguration, Persistenz und Analyse |
+| API proxy | `deepseek-proxy/` | DeepSeek upstream, streaming usage capture, dashboard and storage |
+| Desktop monitor | `deepseek_rates.py` | Tkinter UI for tariff monitoring, account balance and cost/usage analytics |
+| Monitor logic | `deepseek_monitor/` | Tariff calculation, configuration, persistence and analytics |
 
-## Architektur
+## Architecture
 
 ```text
-Kompatibler Client
+Compatible client
 (VS Code / Copilot CLI / Claude Code)
           |
           | Anthropic Messages API
           v
 DeepSeek API Proxy  ------->  DeepSeek API
       |      |
-      |      +--> Usage-Erfassung aus dem SSE-Stream
+      |      +--> Usage extraction from the SSE stream
       |
-      +--> SQLite (lokal, immer aktiv)
+      +--> SQLite (local, always enabled)
       |
-      +--> InfluxDB 2.x (optional, mehrere Hosts)
+      +--> InfluxDB 2.x (optional, multiple hosts)
                     ^
                     |
-             Desktop-Monitor
-             / Dashboard
+               Desktop monitor
+               / dashboard
 ```
 
-- SQLite ist für Proxy-Usage-Datensätze immer aktiv.
-- InfluxDB ist optional und erhält Usage-Daten zusätzlich zu SQLite.
-- Der Monitor kann lokale Proxy-Daten oder eine zentrale InfluxDB-Datenquelle verwenden.
-- Der Proxy speichert den vom Client übermittelten API-Schlüssel nicht im Klartext in der Usage-Datenbank.
+- SQLite is always enabled for proxy usage records.
+- InfluxDB is optional and receives usage data in addition to SQLite.
+- The monitor can use local proxy data or a centralized InfluxDB data source.
+- The proxy does not store the client-supplied API key in plaintext in the usage database.
 
 ## Screenshots
 
-| Hauptmonitor | Kosten und Nutzung | Einstellungen |
+| Main monitor | Cost & Usage | Settings |
 |---|---|---|
-| ![Hauptmonitor](screenshots/main.png) | ![Kosten und Nutzung](screenshots/costs-usage.png) | ![Einstellungen](screenshots/settings.png) |
+| ![Main monitor](screenshots/main.png) | ![Cost and usage](screenshots/costs-usage.png) | ![Settings](screenshots/settings.png) |
 
-![Alle Monitorfenster](screenshots/all.png)
+![All monitor windows](screenshots/all.png)
 
-Das Web-Dashboard des Proxys zeigt erfasste Token-Nutzung und die daraus berechneten Kosten:
+The proxy's web dashboard shows captured token usage and the costs calculated from it:
 
-![Proxy-Dashboard](screenshots/proxy.png)
+![Proxy dashboard](screenshots/proxy.png)
 
-## Schnellstart
+## Quick start
 
-Beispiel für Linux. Für vollständige Installationsschritte, Client-Konfiguration, systemd, Windows und InfluxDB siehe die [Installationsanleitung](docs/INSTALLATION.md).
+Linux example. For complete installation steps, client configuration, systemd, Windows and InfluxDB, see the [installation guide](docs/INSTALLATION.md).
 
-### 1. Repository klonen und Proxy installieren
+### 1. Clone the repository and install the proxy
 
 ```bash
 git clone --branch main https://github.com/Kletternaut/DeepSeek-Monitor.git
@@ -140,38 +140,38 @@ python3 -m venv .venv
 .venv/bin/python main.py
 ```
 
-Das Proxy-Dashboard ist anschließend standardmäßig unter `http://127.0.0.1:8000/` erreichbar.
+The proxy dashboard is then available at `http://127.0.0.1:8000/` by default.
 
-### 2. Desktop-Monitor starten
+### 2. Start the desktop monitor
 
-In einem zweiten Terminal im Repository-Hauptverzeichnis:
+In a second terminal, from the repository root:
 
 ```bash
 python3 deepseek_rates.py
 ```
 
-Proxy und Desktop-Monitor sind separate Komponenten. Für die detaillierte Kosten-/Usage-Ansicht muss der Proxy laufen und Usage-Daten erfassen. Weitere Details stehen in [docs/INSTALLATION.md](docs/INSTALLATION.md).
+The proxy and desktop monitor are separate components. For the detailed cost/usage view, the proxy must be running and collecting usage data. See [docs/INSTALLATION.md](docs/INSTALLATION.md) for further details.
 
-## Sicherheit
+## Security
 
-Proxy und Dashboard besitzen **keine integrierte Authentifizierung oder Autorisierung**. Standardmäßig binden sie an `127.0.0.1`. Setze den Dienst nicht ungeschützt einem LAN oder dem Internet aus. Für einen Fernzugriff sind eine geeignete Zugriffskontrolle, TLS und eine restriktive Netzwerkfreigabe erforderlich.
+The proxy and dashboard have **no built-in authentication or authorization**. By default, they bind to `127.0.0.1`. Do not expose the service to a LAN or the Internet without appropriate access control, TLS and restrictive network access rules.
 
-Der Proxy leitet den vom Client bereitgestellten API-Schlüssel an DeepSeek weiter. Er benötigt dafür keinen separaten API-Schlüssel. Die Kontostandsabfrage des Desktop-Monitors kann unabhängig davon einen API-Schlüssel speichern; schütze dessen Konfiguration und Backups. Der Proxy beabsichtigt nicht, Prompt- oder Antwortinhalte dauerhaft zu speichern, aber Usage-Datensätze enthalten Metadaten wie Zeitstempel, Modell, Tokenzahlen, Request-ID und API-Key-Fingerabdruck. Schütze die SQLite-Datei und gegebenenfalls die InfluxDB.
+The proxy forwards the API key supplied by the client to DeepSeek and does not require a separate key to proxy requests. The desktop monitor may independently store an API key for account balance queries; protect its configuration and backups. The proxy is not intended to persist prompt or response content, but usage records contain metadata such as timestamps, model names, token counts, request IDs and API-key fingerprints. Protect the SQLite file and any configured InfluxDB instance.
 
-Weitere Hinweise: [docs/SECURITY.md](docs/SECURITY.md).
+See [docs/SECURITY.md](docs/SECURITY.md) for further notes.
 
-## Dokumentation
+## Documentation
 
-| Datei | Inhalt |
+| File | Contents |
 |---|---|
-| [docs/INSTALLATION.md](docs/INSTALLATION.md) | Installation, Client-Konfiguration, systemd und Windows |
-| [docs/WINDOWS_SETUP.md](docs/WINDOWS_SETUP.md) | Windows-Build und Tests für `.exe`-Dateien |
-| [docs/INFLUXDB.md](docs/INFLUXDB.md) | InfluxDB-Integration und hostübergreifende Auswertung |
-| [docs/STRUCTURE.md](docs/STRUCTURE.md) | Verzeichnis- und Dateireferenz |
-| [docs/changelog.md](docs/changelog.md) | Änderungshistorie |
-| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Hinweise zur Mitarbeit |
-| [packaging/README.md](packaging/README.md) | Windows-Paketierung |
+| [docs/INSTALLATION.md](docs/INSTALLATION.md) | Installation, client configuration, systemd and Windows |
+| [docs/WINDOWS_SETUP.md](docs/WINDOWS_SETUP.md) | Windows builds and tests for `.exe` files |
+| [docs/INFLUXDB.md](docs/INFLUXDB.md) | InfluxDB integration and multi-host reporting |
+| [docs/STRUCTURE.md](docs/STRUCTURE.md) | Repository directory and file reference |
+| [docs/changelog.md](docs/changelog.md) | Change history |
+| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Contribution guide |
+| [packaging/README.md](packaging/README.md) | Windows packaging |
 
-## Lizenz
+## License
 
-MIT — siehe [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
