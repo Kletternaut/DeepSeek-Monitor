@@ -32,6 +32,7 @@ from deepseek_monitor.paths import (
     AVAILABLE_TIMEZONES,
     CONFIG_FILE,
     DAILY_CSV_FILE,
+    FIRST_RUN_FILE,
     HISTORY_FILE,
     INFLUX_CONFIG_FILE,
     LANGUAGE_FILE,
@@ -147,6 +148,24 @@ def save_poll_interval(seconds: int) -> None:
     try:
         with open(POLL_INTERVAL_FILE, "w", encoding="utf-8") as f:
             f.write(str(seconds) + "\n")
+    except OSError:
+        pass
+
+
+def load_first_run_done() -> bool:
+    """Return ``True`` once the first-run notice has been acknowledged."""
+    try:
+        with open(FIRST_RUN_FILE, "r", encoding="utf-8") as f:
+            return f.read().strip() != ""
+    except OSError:
+        return False
+
+
+def mark_first_run_done() -> None:
+    """Persist that the first-run notice has been acknowledged."""
+    try:
+        with open(FIRST_RUN_FILE, "w", encoding="utf-8") as f:
+            f.write("done\n")
     except OSError:
         pass
 

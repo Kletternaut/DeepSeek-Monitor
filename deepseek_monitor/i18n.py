@@ -89,6 +89,8 @@ BASE_TRANSLATIONS = {
         "data_source":"Datenquelle", "local_proxy":"Lokal (Proxy/SQLite)", "influxdb":"InfluxDB (zentral)",
         "influx_url":"URL", "influx_token":"Token", "influx_org":"Organisation", "influx_bucket":"Bucket",
         "host":"Host", "all_hosts":"Alle Hosts",
+        "first_run_title":"Bitte vor Verwendung prüfen",
+        "first_run_body":"Bevor Sie sich für kostenpflichtige API-Arbeit auf den Monitor verlassen, müssen Sie unabhängig überprüfen, ob die zunächst angezeigten Tarifzonen sowie deren Start- und Endzeiten korrekt sind. Behandeln Sie die Anzeige erst dann als verifiziert, wenn Sie diese Prüfung abgeschlossen haben.\n\nPrüfen Sie außerdem, ob die lokale Zeitzone richtig eingestellt ist und ob die angezeigten Tarifgrenzen, Wochenenden und relevanten chinesischen Feiertage mit den aktuellen offiziellen Regeln übereinstimmen.",
     },
     "en": {
         "tariff":" Rate ", "realtime":" Realtime ", "analytics":" Analytics ", "costs":"Cost & Usage",
@@ -127,6 +129,8 @@ BASE_TRANSLATIONS = {
         "data_source":"Data source", "local_proxy":"Local (proxy/SQLite)", "influxdb":"InfluxDB (central)",
         "influx_url":"URL", "influx_token":"Token", "influx_org":"Organization", "influx_bucket":"Bucket",
         "host":"Host", "all_hosts":"All hosts",
+        "first_run_title":"Please verify before use",
+        "first_run_body":"Before relying on the monitor for paid API work, you must independently verify that the initially displayed tariff zones and their start and end times are correct. Do not treat the display as verified until you have completed this check.\n\nAdditionally, please verify that the local timezone is set correctly and that the displayed tariff boundaries, weekends and relevant Chinese public holidays match the current official rules.",
     },
 }
 TRANSLATIONS = {code: dict(BASE_TRANSLATIONS["en"]) for code in LANGUAGES}

@@ -123,11 +123,13 @@ from deepseek_monitor.paths import (
 from deepseek_monitor.persistence import (
     _init_influx_config,
     load_api_key,
+    load_first_run_done,
     load_history,
     load_influx_config,
     load_language,
     load_poll_interval,
     load_timezone,
+    mark_first_run_done,
     remove_influx_config,
     remove_language,
     remove_saved_api_key,
@@ -2321,6 +2323,8 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
             daemon=True,
         ).start()
 
+        self._maybe_show_first_run_notice()
+
     # --------------------------------------------------------
     # Window helpers
     # --------------------------------------------------------
@@ -3564,6 +3568,102 @@ class DeepSeekFiligreeGUI(_LegacyDeepSeekFiligreeGUI):
 
         dlg.grab_set()
         ok_btn.focus_set()
+
+    def _maybe_show_first_run_notice(self) -> None:
+        """Show the mandatory self-verification notice on first start.
+
+        If not yet acknowledged, the main window is kept hidden and the notice
+        is scheduled via ``after`` so that its ``wait_window`` runs inside the
+        already-active Tk main loop. Only after acknowledgement is the monitor
+        revealed.
+        """
+        if load_first_run_done():
+            return
+        self.root.withdraw()
+        self.root.after(100, self._show_first_run_notice)
+
+    def _show_first_run_notice(self) -> None:
+        """Build and show the first-run notice, blocking until acknowledged.
+
+        Called from within the Tk main loop. ``wait_window`` blocks until the
+        user acknowledges via OK (or Escape/Return/window close), then the main
+        monitor window is revealed. The dialog is centered on the screen.
+        """
+        dlg = tk.Toplevel(self.root)
+        dlg.title(self.t("first_run_title"))
+        dlg.configure(bg=COLOR_BG)
+        dlg.resizable(False, False)
+
+        frame = tk.Frame(
+            dlg,
+            bg=COLOR_CARD,
+            highlightbackground=COLOR_CARD_BORDER,
+            highlightthickness=1,
+        )
+        frame.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
+
+        tk.Label(
+            frame,
+            text=self.t("first_run_body"),
+            font=("Segoe UI", 9),
+            fg=COLOR_TEXT_MAIN,
+            bg=COLOR_CARD,
+            justify="left",
+            wraplength=440,
+        ).pack(padx=20, pady=(16, 12))
+
+        def _close(event: object | None = None) -> None:
+            mark_first_run_done()
+            try:
+                dlg.grab_release()
+            except tk.TclError:
+                pass
+            try:
+                dlg.destroy()
+            except tk.TclError:
+                pass
+
+        ok_btn = tk.Button(
+            frame,
+            text="OK",
+            command=_close,
+            font=("Segoe UI", 8, "bold"),
+            fg=COLOR_TEXT_MAIN,
+            bg=COLOR_ACCENT,
+            activebackground=COLOR_ACCENT,
+            activeforeground="#000000",
+            relief="flat",
+            borderwidth=0,
+            padx=18,
+            pady=3,
+            cursor="hand2",
+        )
+        ok_btn.pack(pady=(0, 14))
+
+        dlg.bind("<Escape>", _close)
+        dlg.bind("<Return>", _close)
+        # Closing via the window manager must also acknowledge the notice.
+        dlg.protocol("WM_DELETE_WINDOW", _close)
+
+        # Center on the screen (not on the monitor window).
+        dlg.update_idletasks()
+        w = dlg.winfo_reqwidth()
+        h = dlg.winfo_reqheight()
+        try:
+            ox = (self.root.winfo_screenwidth() - w) // 2
+            oy = (self.root.winfo_screenheight() - h) // 2
+            dlg.geometry(f"+{max(0, ox)}+{max(0, oy)}")
+        except tk.TclError:
+            pass
+
+        dlg.grab_set()
+        ok_btn.focus_set()
+
+        # Block until acknowledged; runs inside the main loop now.
+        self.root.wait_window(dlg)
+
+        # Reveal the monitor only after the notice has been acknowledged.
+        self.root.deiconify()
 
     def _show_bar_tooltip(self, text: str) -> None:
         """Zeigt ein kleines, nicht-modales Tooltip-Fenster an der Maus."""

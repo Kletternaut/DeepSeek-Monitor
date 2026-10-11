@@ -59,6 +59,7 @@ API_KEY_FILE = os.path.join(CONFIG_DIR, "api_key")
 POLL_INTERVAL_FILE = os.path.join(CONFIG_DIR, "poll_interval")
 INFLUX_CONFIG_FILE = os.path.join(CONFIG_DIR, "influx_config")
 LANGUAGE_FILE = os.path.join(CONFIG_DIR, "language")
+FIRST_RUN_FILE = os.path.join(CONFIG_DIR, "first_run_done")
 
 HISTORY_FILE = os.path.join(STATE_DIR, "balance_history.json")
 DAILY_CSV_FILE = os.path.join(DATA_DIR, "daily_usage.csv")
