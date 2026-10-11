@@ -1,35 +1,39 @@
-# Tariff Accuracy, Verification and Liability Disclaimer
+# Tariff Accuracy Disclaimer and Mandatory User Verification
 
-DeepSeek-Monitor is an independent, community-maintained tool. It is not an official DeepSeek billing service, and its tariff monitor is intended as an aid for planning API usage—not as an authoritative source for deciding what DeepSeek will charge.
+DeepSeek-Monitor is an independent planning tool, not an official DeepSeek billing service. Its tariff monitor is intended to help users understand and plan around published pricing periods. It is **not an authoritative source for determining the charges DeepSeek will apply**.
 
-## Why the displayed times must be verified
+## Why tariff times can be difficult to calculate correctly
 
-Correctly displaying a pricing zone in a user's local timezone requires several pieces of information and transformations to remain correct at the same time:
+The monitor must combine multiple rules and time conversions correctly:
 
-- DeepSeek's current peak and off-peak rules, including the exact start and end instants of each UTC time window.
-- Weekday and weekend boundaries and the applicable Chinese public-holiday calendar, which may be unfamiliar to users outside China and must be kept up to date.
-- Conversion from the billing schedule to the timezone selected by the user, including changes between standard time and daylight-saving time in regions such as Europe.
-- Correct system time, timezone-database rules, application logic and configuration.
-- Any changes DeepSeek makes to its prices or billing schedule.
+- DeepSeek's current Peak and Off-Peak windows and their exact start and end instants.
+- Weekend boundaries as defined by the applicable billing rules.
+- The Chinese public-holiday calendar, which users outside China may not be familiar with and which must be updated when the official holiday schedule is announced.
+- Conversion of those rules to the user's selected local timezone, including changes between standard time and daylight-saving time, such as the seasonal clock changes in Europe.
+- Correct system time, timezone-database data, application logic and configuration.
+- Changes DeepSeek may make to prices, multipliers or billing rules.
 
-The software's holiday dates and tariff rules are maintained in code and may not reflect a later policy change, newly announced holiday schedule, timezone-database change or an implementation defect. Even if the display appears plausible, its accuracy is not guaranteed.
+A display can look plausible and still be wrong because of outdated holiday data, a rule change, timezone conversion, daylight-saving-time handling, incorrect configuration or a software defect. The holiday dates and tariff rules are maintained in code and may not automatically reflect later changes.
 
-Refer to [DeepSeek's official pricing documentation](https://api-docs.deepseek.com/quick_start/pricing/) for the current published schedule. The official policy and prices may change.
+Check DeepSeek's current official [pricing documentation](https://api-docs.deepseek.com/quick_start/pricing/) for the applicable rules. DeepSeek may update its prices or billing schedule.
 
-## Mandatory user verification before relying on the monitor
+## Mandatory self-check before cost-sensitive use
 
-**Before using the monitor to plan paid API work, the user must independently verify that the initially displayed pricing zones and their start and end times are correct. Do not rely on the monitor until this verification has been completed.**
+**Before relying on the monitor for paid API work, you must independently verify that the initially displayed tariff zones and their start and end times are correct. Do not treat the display as verified until you have completed this check.**
 
-Compare the displayed zones against DeepSeek's current official pricing documentation, including the transitions relevant to the user's timezone. Check that the Peak/Off-peak boundaries, weekends and applicable Chinese public holidays are shown at the correct local times.
+At a minimum:
 
-Repeat this verification after application updates, changes to the selected timezone or system timezone data, daylight-saving-time transitions, changes to the annual Chinese public-holiday calendar, or any DeepSeek pricing/billing-policy announcement. Re-check the official schedule periodically. Do not use the monitor as the sole basis for cost-sensitive decisions; DeepSeek's own account usage and billing records are authoritative for the charges actually applied.
+1. Confirm that the monitor is set to the correct local timezone.
+2. Compare the displayed Peak and Off-Peak periods and the relevant weekend and Chinese public-holiday periods with DeepSeek's current official pricing rules.
+3. Verify the corresponding start and end times in your local timezone, paying particular attention to the European change between standard time and daylight-saving time, where applicable.
+4. Check the upcoming transitions shown by the countdown and timeline. Do not rely on the monitor for cost-sensitive scheduling if you cannot verify the displayed times independently.
 
-## No warranty
+Repeat the check after installing an application update, changing the selected timezone or relevant system timezone data, each daylight-saving-time transition, updating the Chinese public-holiday calendar, or any announcement that changes DeepSeek's prices or billing rules. Re-check the official schedule periodically.
 
-The monitor, tariff calculations, countdowns, timeline and cost estimates are provided **“as is” and “as available,” without warranties or guarantees of any kind**, to the maximum extent permitted by applicable law. The maintainers do not warrant that tariff zones, transition times, holiday dates, multipliers, prices or cost estimates will be accurate, complete, current or uninterrupted.
+If the displayed times do not match the official rules—or you cannot establish that they match—**do not rely on the monitor to decide when to run token-intensive work**. Use DeepSeek's current official pricing information and account usage/billing records instead. DeepSeek's billing records, not this monitor, determine the charges actually applied.
 
-## Limitation of liability
+## No guarantee of tariff accuracy
 
-To the maximum extent permitted by applicable law, the project authors and contributors disclaim liability for losses or damages arising from reliance on an incorrect, incomplete, outdated or unavailable tariff display or calculation. This includes unexpected or increased API charges, missed opportunities to use lower-cost periods, and indirect or consequential losses resulting from inaccurate zone boundaries, timezone conversions, daylight-saving-time handling, holiday calendars, configuration, software defects or changes to DeepSeek's billing rules.
+The tariff zone, multiplier, countdown, timeline and cost estimates are provided for informational and planning purposes. The project maintainers do not guarantee that these values will always be accurate, complete, current or uninterrupted. Incorrect information may lead users to schedule work in a higher-cost period than expected and incur increased API costs.
 
-Nothing in this disclaimer excludes or limits liability to the extent that such exclusion or limitation is prohibited by applicable law. The enforceability and effect of a liability limitation can depend on the applicable law and the circumstances of use.
+The software is distributed under the terms of the [MIT License](../LICENSE), which contains its own warranty and liability provisions. This tariff-specific notice highlights the risks and the required user verification; it does not purport to exclude or limit liability where applicable law does not permit that exclusion or limitation.
