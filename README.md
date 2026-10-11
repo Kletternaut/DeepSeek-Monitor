@@ -22,6 +22,10 @@ Cost figures are calculated from the usage data reported by the API and the conf
 
 The tariff monitor is more than a status display: it is a practical planning tool for developers whose local timezone differs from the time windows used for DeepSeek billing. It translates those billing rules into a clear, at-a-glance visual display in the timezone you work in.
 
+![Compact DeepSeek tariff monitor showing the current pricing zone, countdown and visual timeline](screenshots/main.png)
+
+*The compact, unobtrusive widget keeps the current pricing factor and upcoming zone changes visible while you code.*
+
 The monitor shows **which pricing-factor period is active right now and exactly how long it has left**. A live countdown tells you when the current period ends; the color-coded 24-hour timeline shows the sequence of pricing zones, with a marker for the current time. Together, these make it easy to see when a lower-cost period starts, when a higher-cost period begins or ends, and how much time remains before the next transition—without having to mentally convert DeepSeek's billing schedule from another timezone.
 
 This visibility can materially reduce development costs when you use it to plan longer coding sessions, agent runs, or other token-intensive work around lower-cost periods. Instead of discovering after the fact that a long session ran during a higher-factor window, you can see the upcoming transition and decide when to start, pause, or continue work. The monitor does not reduce costs automatically; it gives you timely information to make that decision.
