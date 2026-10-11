@@ -18,9 +18,9 @@ PRICING_HTML = """\
 
 
 def test_parse_official_table_layout():
-    result = pricing.pricing.parse_pricing_html(PRICING_HTML)
+    result = pricing.parse_pricing_html(PRICING_HTML)
 
-    assert result == pricing.pricing.DEFAULT_PRICING
+    assert result == pricing.DEFAULT_PRICING
 
 
 def test_parser_tracks_reversed_model_columns():
