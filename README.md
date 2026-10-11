@@ -2,15 +2,15 @@
 
 **DeepSeek token usage analytics, API cost tracking and real-time pricing monitoring — for BYOK workflows and beyond.**
 
-When using DeepSeek with your own API key (Bring Your Own Key, BYOK) through development tools such as VS Code with GitHub Copilot Chat, it can be difficult to get a consolidated view of token consumption and resulting API costs directly in the client.
+When developing with DeepSeek through BYOK tools such as VS Code with GitHub Copilot Chat, API costs depend not only on how much you use a model, but also on the pricing period in which that usage takes place. This is easy to miss when your local time differs from the time windows used for DeepSeek billing.
 
-**DeepSeek-Monitor makes usage and costs visible.** It combines a real-time pricing monitor with detailed analytics for recorded token usage. An API proxy provides the usage data reported by DeepSeek for this analysis.
+**DeepSeek-Monitor makes those billing windows visible.** Its visual tariff monitor shows which pricing-factor period is active, how long it will continue, and when the next period begins—in your chosen local timezone. That makes it easier to plan longer coding sessions and shift work to lower-cost periods. The project also includes request-level token usage and cost analytics, supported by a proxy that captures usage reported by DeepSeek.
 
 This is an independent open-source project. It is not affiliated with, developed, sponsored, endorsed, or operated by DeepSeek (深度求索).
 
 ## Features at a glance
 
-- **Real-time pricing monitor:** See the current DeepSeek pricing zone, its applicable multiplier and the time remaining until the next zone change.
+- **Visual billing-window monitor:** At a glance, see the active DeepSeek pricing factor, the time remaining in that period, and the upcoming zone changes in your own timezone—helping you plan coding work around lower-cost windows.
 - **Token usage and cost analytics:** Review recorded token consumption, calculated API costs, daily totals and individual request details.
 - **API proxy:** Forward compatible client requests to the DeepSeek API and capture usage data reported in API responses.
 - **Flexible storage:** SQLite stores usage data locally; InfluxDB 2.x can optionally be used for centralized, multi-host reporting.
@@ -18,18 +18,25 @@ This is an independent open-source project. It is not affiliated with, developed
 
 Cost figures are calculated from the usage data reported by the API and the configured price table. Check the configured prices and note the limitations around historical pricing and the Chinese public-holiday calendar before treating these figures as financial records.
 
-## Real-time pricing monitor
+## Visual real-time pricing monitor
 
-The desktop monitor displays the current tariff status and a timeline of pricing zones. Features include:
+The tariff monitor is more than a status display: it is a practical planning tool for developers whose local timezone differs from the time windows used for DeepSeek billing. It translates those billing rules into a clear, at-a-glance visual display in the timezone you work in.
 
-- current pricing zone and its multiplier
-- countdown until the next zone change
-- timeline showing pricing zones over time
-- configurable display timezone
-- optional audible warning before a tariff change
-- DeepSeek API account balance monitoring
+The monitor shows **which pricing-factor period is active right now and exactly how long it has left**. A live countdown tells you when the current period ends; the color-coded 24-hour timeline shows the sequence of pricing zones, with a marker for the current time. Together, these make it easy to see when a lower-cost period starts, when a higher-cost period begins or ends, and how much time remains before the next transition—without having to mentally convert DeepSeek's billing schedule from another timezone.
 
-The tariff calculation and the display timezone are separate concerns. Tariff rules are evaluated using the configured UTC time windows and the date in the **Asia/Shanghai** timezone. Weekends and Chinese public holidays in the calendar currently maintained in the code are treated as off-peak. The calendar currently covers 2026 and must be updated for subsequent years.
+This visibility can materially reduce development costs when you use it to plan longer coding sessions, agent runs, or other token-intensive work around lower-cost periods. Instead of discovering after the fact that a long session ran during a higher-factor window, you can see the upcoming transition and decide when to start, pause, or continue work. The monitor does not reduce costs automatically; it gives you timely information to make that decision.
+
+Features include:
+
+- **Active factor at a glance:** the current tariff zone (Peak, Standard, Weekend or Holiday) and its applicable factor. The current implementation uses a 2× Peak multiplier.
+- **Live remaining-time countdown:** see how long the current zone will continue and when the next zone change is due.
+- **Local-time timeline:** a color-coded 24-hour view with a current-time marker, so zone boundaries are understandable in your own timezone.
+- **Configurable display timezone:** choose your local timezone independently of the tariff rules used for billing-period calculations.
+- **Optional audible warning:** the monitor can alert you 60 seconds before an upcoming tariff transition.
+- **Compact desktop widget:** keep the current factor and countdown visible while coding; the mini monitor also offers an always-on-top toggle.
+- **Account balance monitoring:** monitor your DeepSeek API balance in a separate view.
+
+The tariff calculation and the display timezone are separate concerns. Tariff rules use configured UTC time windows and the date in the **Asia/Shanghai** timezone. Weekends and Chinese public holidays in the calendar currently maintained in the code are treated as off-peak. The calendar currently covers 2026 and must be updated for subsequent years.
 
 ## Token usage and API cost analytics
 
