@@ -16,10 +16,10 @@ Public symbols:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
@@ -47,6 +47,20 @@ def _window_start(days: int) -> str:
     """ISO start time ``now - days`` in Europe/Berlin (same format as the DB)."""
     start = datetime.now(_BERLIN) - timedelta(days=max(0, days))
     return start.isoformat(timespec="seconds")
+
+
+def _validate_calendar_date(value: str | None, field: str) -> str | None:
+    """Validate a dashboard date input without rewriting timestamp filters."""
+    if value is None:
+        return None
+    if len(value) == 10:
+        try:
+            parsed = date.fromisoformat(value)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid {field} date.") from exc
+        if parsed.isoformat() != value:
+            raise HTTPException(status_code=400, detail=f"Invalid {field} date.")
+    return value
 
 
 def _resolve_fingerprint(
@@ -137,13 +151,24 @@ def add_dashboard_routes(app: FastAPI, storage: Storage) -> None:
         fingerprint: str | None = Query(default=None),
         label: str | None = Query(default=None),
         days: int = Query(default=7),
+        start: str | None = Query(default=None),
+        end: str | None = Query(default=None),
     ) -> JSONResponse:
-        """Aggregate cost/tokens over the last ``days`` days."""
+        """Aggregate cost/tokens over a relative or explicit calendar-date range."""
         pricing = load_pricing(storage)
         fp = _resolve_fingerprint(storage, fingerprint, label)
-        start = _window_start(days)
+        start = _validate_calendar_date(start, "start")
+        end = _validate_calendar_date(end, "end")
+        if start and end and start > end:
+            raise HTTPException(status_code=400, detail="Start date must not be after end date.")
+        query_start = start or _window_start(days)
 
-        rows = storage.get_usage(fingerprint=fp, start=start, limit=None)
+        rows = storage.get_usage(
+            fingerprint=fp,
+            start=query_start,
+            end=end,
+            limit=None,
+        )
         usages = [row_to_usage(row) for row in rows]
 
         total_cost = 0.0
@@ -234,8 +259,11 @@ def add_dashboard_routes(app: FastAPI, storage: Storage) -> None:
 
     @app.post("/api/pricing")
     async def api_set_pricing(body: PricingBody) -> JSONResponse:
-        """Save a manually passed price table."""
-        save_pricing(storage, body.pricing)
+        """Validate and save a manually passed price table."""
+        try:
+            save_pricing(storage, body.pricing)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         return JSONResponse({"ok": True})
 
     @app.post("/api/pricing/refresh")
@@ -369,6 +397,11 @@ _DASHBOARD_HTML = r"""<!DOCTYPE html>
 const $ = (id) => document.getElementById(id);
 const fmtUsd = (v) => "$" + Number(v || 0).toFixed(4);
 const fmtInt = (v) => Number(v || 0).toLocaleString("en-US");
+// All values inserted into innerHTML originate from stored API data and must
+// be escaped, especially user-editable labels.
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (ch) => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+}[ch]));
 
 // Show the stored ISO timestamp as local time without offset.
 // The DB already stores Europe/Berlin local time; the offset is only
@@ -426,7 +459,7 @@ function renderSummary(s) {
     $("daily-wrap").innerHTML = `<table><thead><tr>
       <th>Date</th><th class="num">Cost</th><th class="num">Input</th>
       <th class="num">Output</th><th class="num">Requests</th></tr></thead><tbody>` +
-      d.map(r => `<tr><td>${r.date}</td><td class="num">${fmtUsd(r.cost)}</td>
+      d.map(r => `<tr><td>${esc(r.date)}</td><td class="num">${fmtUsd(r.cost)}</td>
         <td class="num">${fmtInt(r.input_tokens)}</td>
         <td class="num">${fmtInt(r.output_tokens)}</td>
         <td class="num">${fmtInt(r.requests)}</td></tr>`).join("") +
@@ -441,7 +474,7 @@ function renderSummary(s) {
     $("per-label-wrap").innerHTML = `<table><thead><tr>
       <th>Label</th><th class="num">Cost</th><th class="num">Input</th>
       <th class="num">Output</th><th class="num">Requests</th></tr></thead><tbody>` +
-      keys.map(k => `<tr><td>${k}</td><td class="num">${fmtUsd(pl[k].cost)}</td>
+      keys.map(k => `<tr><td>${esc(k)}</td><td class="num">${fmtUsd(pl[k].cost)}</td>
         <td class="num">${fmtInt(pl[k].input_tokens)}</td>
         <td class="num">${fmtInt(pl[k].output_tokens)}</td>
         <td class="num">${fmtInt(pl[k].requests)}</td></tr>`).join("") +
@@ -452,7 +485,7 @@ function renderSummary(s) {
   const cur = sel.value;
   const labels = s.labels || [];
   sel.innerHTML = '<option value="">all</option>' +
-    labels.map(l => `<option value="${l}">${l}</option>`).join("");
+    labels.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join("");
   sel.value = cur;
 }
 
@@ -466,8 +499,8 @@ function renderEvents(events) {
     <th class="num">In</th><th class="num">Out</th><th class="num">Cache R</th>
     <th class="num">Cache W</th><th class="num">Cost</th></tr></thead><tbody>` +
     events.map(e => `<tr>
-      <td>${fmtTs(e.timestamp)}</td><td>${e.label}</td><td>${e.model}</td>
-      <td><span class="pill ${e.tariff}">${e.tariff}</span></td>
+      <td>${esc(fmtTs(e.timestamp))}</td><td>${esc(e.label)}</td><td>${esc(e.model)}</td>
+      <td><span class="pill ${esc(e.tariff)}">${esc(e.tariff)}</span></td>
       <td class="num">${fmtInt(e.input_tokens)}</td>
       <td class="num">${fmtInt(e.output_tokens)}</td>
       <td class="num">${fmtInt(e.cache_read_tokens)}</td>
@@ -485,10 +518,10 @@ function renderLabels(items) {
     <th>Fingerprint</th><th>Current label</th><th>New label</th><th></th>
     </tr></thead><tbody>` +
     items.map(it => `<tr>
-      <td class="fp">${it.fingerprint.slice(0, 16)}…</td>
-      <td>${it.label}</td>
-      <td><input data-fp="${it.fingerprint}" value="${it.label}"></td>
-      <td class="row-actions"><button class="ghost" data-save="${it.fingerprint}">Save</button></td>
+      <td class="fp">${esc(it.fingerprint.slice(0, 16))}…</td>
+      <td>${esc(it.label)}</td>
+      <td><input data-fp="${esc(it.fingerprint)}" value="${esc(it.label)}"></td>
+      <td class="row-actions"><button class="ghost" data-save="${esc(it.fingerprint)}">Save</button></td>
     </tr>`).join("") + `</tbody></table>`;
 
   document.querySelectorAll("button[data-save]").forEach(btn => {
@@ -510,14 +543,16 @@ function renderLabels(items) {
 
 async function reload() {
   try {
+    const start = $("f-start").value;
+    const end = $("f-end").value;
     const p = qs();
+    if (start) p.set("start", start);
+    if (end) p.set("end", end);
     const days = $("f-days").value;
     const s = await getJson("/api/summary?days=" + encodeURIComponent(days) + "&" + p.toString());
     renderSummary(s);
 
     const up = qs();
-    const start = $("f-start").value;
-    const end = $("f-end").value;
     if (start) up.set("start", start);
     if (end) up.set("end", end);
     up.set("limit", "100");

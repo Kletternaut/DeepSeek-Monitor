@@ -69,8 +69,11 @@ class TestMergeUsage:
         """Fall 1: normales message_start-Event (Anthropic-Feldnamen)."""
         event = {
             "type": "message_start",
-            "message": {"id": "msg_123", "model": "deepseek-v4-pro"},
-            "usage": {"input_tokens": 42, "output_tokens": 1},
+            "message": {
+                "id": "msg_123",
+                "model": "deepseek-v4-pro",
+                "usage": {"input_tokens": 42, "output_tokens": 1},
+            },
         }
         u = extract_usage_from_event(event)
         assert u is not None
@@ -161,8 +164,8 @@ class TestFullPipeline:
         """Gesamter Anthropic-Stream, inkl. keep-alive, durch den echten Parser."""
         payload = (
             b"event: message_start\n"
-            b'data: {"type":"message_start","message":{"id":"m1","model":"deepseek-flash"},'
-            b'"usage":{"input_tokens":55,"output_tokens":1}}\n\n'
+            b'data: {"type":"message_start","message":{"id":"m1","model":"deepseek-flash",'
+            b'"usage":{"input_tokens":55,"output_tokens":1}}}\n\n'
             b": keep-alive\n\n"
             b'event: content_block_start\ndata: {"type":"content_block_start"}\n\n'
             b'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\n\n'

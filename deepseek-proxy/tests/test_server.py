@@ -14,8 +14,8 @@ from proxy.server import DeepSeekProxyServer
 # Beispielhafter Anthropic-SSE-Stream (Antwort des Upstream).
 SSE_BODY = (
     b"event: message_start\n"
-    b'data: {"type":"message_start","message":{"id":"m1","model":"deepseek-flash"},'
-    b'"usage":{"input_tokens":55,"output_tokens":1}}\n\n'
+    b'data: {"type":"message_start","message":{"id":"m1","model":"deepseek-flash",'
+    b'"usage":{"input_tokens":55,"output_tokens":1}}}\n\n'
     b": keep-alive\n\n"
     b"event: content_block_delta\n"
     b'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\n\n'

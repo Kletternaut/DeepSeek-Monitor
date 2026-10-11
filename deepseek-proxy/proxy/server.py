@@ -422,7 +422,9 @@ class DeepSeekProxyServer:
                 return
             if not isinstance(obj, dict):
                 return
-            if isinstance(obj.get("usage"), dict):
+            message = obj.get("message")
+            nested_usage = message.get("usage") if isinstance(message, dict) else None
+            if isinstance(obj.get("usage"), dict) or isinstance(nested_usage, dict):
                 state["seen"] = True
             try:
                 merge_usage(obj, accumulator)

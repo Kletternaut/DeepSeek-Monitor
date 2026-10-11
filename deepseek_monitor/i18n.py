@@ -55,6 +55,7 @@ BASE_TRANSLATIONS = {
     "de": {
         "tariff":" Tarif ", "realtime":" Echtzeit ", "analytics":" Analytics ", "costs":"Kosten & Verbrauch",
         "tz":"TZ:", "weekend":"Wochenende:", "weekend_label":"Wochenende", "weekend_text":" Sa 00:00 – Mo 00:00 (Peking-Zeit)",
+        "holiday_label":"China-Feiertag", "holiday_short":"FT", "holiday_text":"Chinesischer gesetzlicher Feiertag: ganztägig Off-Peak (Peking-Zeit)",
         "peak":"Peak:", "standard":"Std:", "refresh":"Jetzt aktualisieren",
         "api":"API", "api_key":"API-Key", "api_key_title":"DeepSeek API-Key",
         "api_key_hint":"API-Key eingeben oder neu setzen:", "save":"Speichern",
@@ -77,7 +78,7 @@ BASE_TRANSLATIONS = {
         "no_key":"Kein API-Key hinterlegt.",
         "confirm_remove":"Gespeicherten API-Key wirklich löschen?",
         "no_key_error":"Kein API-Key: bitte über den API-Dialog setzen oder DEEPSEEK_API_KEY verwenden.",
-        "peak_status":"PEAK", "standard_status":"STANDARD", "weekend_status":"WOCHENENDE OFF-PEAK",
+        "peak_status":"PEAK", "standard_status":"STANDARD", "weekend_status":"WOCHENENDE OFF-PEAK", "holiday_status":"CHINA-FEIERTAG · OFF-PEAK",
         "zone_warning":"Tarifwechsel in ~{seconds} s → {status}",
         "language":"Sprache", "timezone":"Zeitzone", "auto":"Auto", "settings_title":"Einstellungen", "appearance":"Darstellung", "data":"Daten", "actions":"Aktionen", "on_top":"Immer im Vordergrund",
         "weekdays":["Mo","Di","Mi","Do","Fr","Sa","So"],
@@ -92,6 +93,7 @@ BASE_TRANSLATIONS = {
     "en": {
         "tariff":" Rate ", "realtime":" Realtime ", "analytics":" Analytics ", "costs":"Cost & Usage",
         "tz":"TZ:", "weekend":"Weekend:", "weekend_label":"Weekend", "weekend_text":" Sat 00:00 – Mon 00:00 (Beijing time)",
+        "holiday_label":"China holiday", "holiday_short":"HOL", "holiday_text":"Chinese public holiday: off-peak all day (Beijing time)",
         "peak":"Peak:", "standard":"Std:", "refresh":"Refresh now",
         "api":"API", "api_key":"API key", "api_key_title":"DeepSeek API key",
         "api_key_hint":"Enter or replace API key:", "save":"Save",
@@ -114,7 +116,7 @@ BASE_TRANSLATIONS = {
         "no_key":"No API key configured.",
         "confirm_remove":"Really delete the saved API key?",
         "no_key_error":"No API key: set it in the API dialog or use DEEPSEEK_API_KEY.",
-        "peak_status":"PEAK", "standard_status":"STANDARD", "weekend_status":"WEEKEND OFF-PEAK",
+        "peak_status":"PEAK", "standard_status":"STANDARD", "weekend_status":"WEEKEND OFF-PEAK", "holiday_status":"CHINESE HOLIDAY · OFF-PEAK",
         "zone_warning":"Tariff change in ~{seconds} s → {status}",
         "language":"Language", "timezone":"Timezone", "auto":"Automatic", "settings_title":"Settings", "appearance":"Appearance", "data":"Data", "actions":"Actions", "on_top":"Always on top",
         "weekdays":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],

@@ -180,10 +180,16 @@ class Storage:
             clauses.append("api_key_fingerprint = ?")
             params.append(fingerprint)
         if start is not None:
-            clauses.append("timestamp >= ?")
+            if len(start) == 10 and start[4] == "-" and start[7] == "-":
+                clauses.append("substr(timestamp, 1, 10) >= ?")
+            else:
+                clauses.append("timestamp >= ?")
             params.append(start)
         if end is not None:
-            clauses.append("timestamp <= ?")
+            if len(end) == 10 and end[4] == "-" and end[7] == "-":
+                clauses.append("substr(timestamp, 1, 10) <= ?")
+            else:
+                clauses.append("timestamp <= ?")
             params.append(end)
 
         query = "SELECT * FROM usage_events"

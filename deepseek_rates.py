@@ -67,6 +67,7 @@ from deepseek_monitor.config import (
     COLOR_BG,
     COLOR_CARD,
     COLOR_CARD_BORDER,
+    COLOR_HOLIDAY,
     COLOR_NEEDLE,
     COLOR_PEAK,
     COLOR_STANDARD,
@@ -515,21 +516,47 @@ class _LegacyDeepSeekFiligreeGUI:
         )
         weekend_frame.pack()
 
-        tk.Label(
+        self.lbl_weekend_label = tk.Label(
             weekend_frame,
             text=self.t("weekend"),
             font=("Segoe UI", 7, "bold"),
             fg=COLOR_WEEKEND,
             bg=COLOR_BG,
-        ).pack(side=tk.LEFT)
+        )
+        self.lbl_weekend_label.pack(side=tk.LEFT)
 
-        tk.Label(
+        self.lbl_weekend_text = tk.Label(
             weekend_frame,
             text=self.t("weekend_text"),
             font=("Segoe UI", 7),
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_BG,
-        ).pack(side=tk.LEFT)
+        )
+        self.lbl_weekend_text.pack(side=tk.LEFT)
+
+        holiday_frame = tk.Frame(
+            self.tab_tarif,
+            bg=COLOR_BG,
+        )
+        holiday_frame.pack()
+
+        self.lbl_holiday_label = tk.Label(
+            holiday_frame,
+            text=self.t("holiday_label"),
+            font=("Segoe UI", 7, "bold"),
+            fg=COLOR_HOLIDAY,
+            bg=COLOR_BG,
+        )
+        self.lbl_holiday_label.pack(side=tk.LEFT)
+
+        self.lbl_holiday_text = tk.Label(
+            holiday_frame,
+            text=self.t("holiday_text"),
+            font=("Segoe UI", 7),
+            fg=COLOR_TEXT_MAIN,
+            bg=COLOR_BG,
+        )
+        self.lbl_holiday_text.pack(side=tk.LEFT)
 
         self.lbl_warning = tk.Label(
             self.tab_tarif,
@@ -676,6 +703,7 @@ class _LegacyDeepSeekFiligreeGUI:
             (COLOR_PEAK, "Peak"),
             (COLOR_STANDARD, self.t("normal")),
             (COLOR_WEEKEND, self.t("weekend_label")),
+            (COLOR_HOLIDAY, self.t("holiday_label")),
         ):
             swatch = tk.Canvas(
                 legend,
@@ -770,6 +798,7 @@ class _LegacyDeepSeekFiligreeGUI:
             ("Peak", "peak"),
             (self.t("normal"), "standard"),
             (self.t("weekend_label"), "weekend"),
+            (self.t("holiday_label"), "holiday"),
             (self.t("savings"), "savings"),
         ]
 
@@ -837,6 +866,7 @@ class _LegacyDeepSeekFiligreeGUI:
             "peak",
             "standard",
             "weekend",
+            "holiday",
             "saving",
         )
 
@@ -853,6 +883,7 @@ class _LegacyDeepSeekFiligreeGUI:
             "peak": "Peak",
             "standard": self.t("normal"),
             "weekend": self.t("weekend_short"),
+            "holiday": self.t("holiday_short"),
             "saving": self.t("saving"),
         }
 
@@ -861,7 +892,8 @@ class _LegacyDeepSeekFiligreeGUI:
             "usage": 88,
             "peak": 88,
             "standard": 88,
-            "weekend": 80,
+            "weekend": 72,
+            "holiday": 72,
             "saving": 90,
         }
 
@@ -1230,6 +1262,8 @@ class _LegacyDeepSeekFiligreeGUI:
 
         self.lbl_weekend_label.config(text=self.t("weekend"))
         self.lbl_weekend_text.config(text=self.t("weekend_text"))
+        self.lbl_holiday_label.config(text=self.t("holiday_label"))
+        self.lbl_holiday_text.config(text=self.t("holiday_text"))
         self.api_header_btn.config(text=self.t("api"))
         self.api_manage_btn.config(text=self.t("api_key"))
         self.btn_refresh.config(text=self.t("refresh"))
@@ -1243,7 +1277,7 @@ class _LegacyDeepSeekFiligreeGUI:
         for column, key in {
             "date":"date", "usage":"usage", "peak":"peak",
             "standard":"normal", "weekend":"weekend_short",
-            "saving":"savings",
+            "holiday":"holiday_short", "saving":"savings",
         }.items():
             self.tree_daily.heading(column, text=self.t(key))
 
@@ -1780,6 +1814,12 @@ class _LegacyDeepSeekFiligreeGUI:
                 * plot_h
             )
 
+            holiday_height = (
+                float(row.get("holiday_usage", 0.0))
+                / max_value
+                * plot_h
+            )
+
             peak_height = (
                 float(row["peak_usage"])
                 / max_value
@@ -1789,14 +1829,13 @@ class _LegacyDeepSeekFiligreeGUI:
             x_left = x_center - bar_w / 2
             x_right = x_center + bar_w / 2
 
-            # Stacked segments:
-            # bottom normal (green), middle weekend (orange),
-            # oben Peak (rot).
+            # Stacked segments: standard, weekend, holiday, then peak.
             segment_top = base_y
 
             for segment_height, segment_color in (
                 (standard_height, COLOR_STANDARD),
                 (weekend_height, COLOR_WEEKEND),
+                (holiday_height, COLOR_HOLIDAY),
                 (peak_height, COLOR_PEAK),
             ):
                 if segment_height <= 0:
@@ -1878,6 +1917,14 @@ class _LegacyDeepSeekFiligreeGUI:
             )
         )
 
+        self.analytics_vars["holiday"].set(
+            format_money(
+                analytics.get("holiday_usage", 0.0),
+                currency,
+                self.language,
+            )
+        )
+
         self.analytics_vars["savings"].set(
             format_money(
                 analytics.get(
@@ -1936,6 +1983,11 @@ class _LegacyDeepSeekFiligreeGUI:
                         self.language,
                     ),
                     format_money(
+                        row.get("holiday_usage", 0.0),
+                        currency,
+                        self.language,
+                    ),
+                    format_money(
                         row["avoidable_savings"],
                         currency,
                         self.language,
@@ -1964,6 +2016,12 @@ class _LegacyDeepSeekFiligreeGUI:
                     if interval.get("gap")
                     else ""
                 )
+                status_label = {
+                    "PEAK": self.t("peak_status"),
+                    "STANDARD": self.t("standard_status"),
+                    "WEEKEND": self.t("weekend_label"),
+                    "HOLIDAY": self.t("holiday_label"),
+                }.get(part["status"], part["status"])
 
                 self.tree_intervals.insert(
                     "",
@@ -1975,7 +2033,7 @@ class _LegacyDeepSeekFiligreeGUI:
                         end.strftime(
                             "%d.%m %H:%M:%S"
                         ),
-                        part["status"],
+                        status_label,
                         format_money(
                             part["amount"],
                             currency,
@@ -2041,6 +2099,7 @@ class _LegacyDeepSeekFiligreeGUI:
                 "PEAK": self.t("peak_status"),
                 "STANDARD": self.t("standard_status"),
                 "WEEKEND": self.t("weekend_status"),
+                "HOLIDAY": self.t("holiday_status"),
             }.get(new_status, new_status)
             text = self.t(
                 "zone_warning",
@@ -2141,6 +2200,7 @@ class _LegacyDeepSeekFiligreeGUI:
             "PEAK": self.t("peak_status"),
             "STANDARD": self.t("standard_status"),
             "WEEKEND": self.t("weekend_status"),
+            "HOLIDAY": self.t("holiday_status"),
         }.get(_status_key, status_text)
 
         self.lbl_badge.config(

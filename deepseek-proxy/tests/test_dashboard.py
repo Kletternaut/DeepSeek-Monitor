@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from proxy.dashboard import add_dashboard_routes
 from proxy.labels import fingerprint_key
+from proxy.pricing import DEFAULT_PRICING
 from proxy.storage import Storage
 from proxy.usage import TokenUsage, now_iso_berlin
 
@@ -58,9 +59,9 @@ def _seed(storage):
     )
 
 
-def test_index_returns_html():
+def test_index_returns_html(tmp_path):
     async def run():
-        storage = Storage()  # temporary default path is fine for this test
+        storage = Storage(str(tmp_path / "dashboard-index.db"))
         app = _make_app(storage)
         resp = await _get(app, "/")
         assert resp.status_code == 200
@@ -159,6 +160,8 @@ def test_pricing_get_and_set(tmp_path):
         assert resp.json() == {"ok": True}
 
         resp = await _get(app, "/api/pricing")
-        assert resp.json() == custom
+        loaded = resp.json()
+        assert loaded["deepseek-flash"] == custom["deepseek-flash"]
+        assert loaded["deepseek-v4-pro"] == DEFAULT_PRICING["deepseek-v4-pro"]
 
     asyncio.run(run())

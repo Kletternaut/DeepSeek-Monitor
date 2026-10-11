@@ -14,10 +14,10 @@ from proxy.storage import Storage
 from proxy.usage import TokenUsage
 
 # Verifizierte Zeiten:
-#   2026-09-25 = Freitag (Werktag)
+#   2026-09-24 = Donnerstag (Werktag, kein Feiertag)
 #   Peak-Fenster (UTC): 01:00-04:00 und 06:00-10:00
-PEAK_TS = "2026-09-25T11:30:42+02:00"  # UTC 09:30 -> Peak
-OFFPEAK_TS = "2026-09-25T13:00:00+02:00"  # UTC 11:00 -> Off-Peak
+PEAK_TS = "2026-09-24T11:30:42+02:00"  # UTC 09:30 -> Peak
+OFFPEAK_TS = "2026-09-24T13:00:00+02:00"  # UTC 11:00 -> Off-Peak
 SATURDAY_TS = "2026-09-26T09:00:00+02:00"  # UTC 07:00 Sa -> Off-Peak (Wochenende)
 MONDAY_PEAK_TS = "2026-09-28T09:00:00+02:00"  # UTC 07:00 Mo -> Peak
 
@@ -28,6 +28,15 @@ class TestIsPeak:
 
     def test_offpeak_weekday(self):
         assert is_peak(OFFPEAK_TS) is False
+
+    def test_chinese_public_holiday_is_off_peak(self):
+        # Mid-Autumn Festival: the Chinese calendar is used even though the
+        # timestamp is represented with a Berlin offset.
+        assert is_peak("2026-09-25T11:30:42+02:00") is False
+
+    def test_chinese_public_holiday_is_offpeak_even_in_window(self):
+        # 2026-09-25 is an official Chinese public holiday (Mid-Autumn Festival).
+        assert is_peak("2026-09-25T09:30:00+02:00") is False
 
     def test_weekend_is_offpeak_even_in_window(self):
         # Samstag 07:00 UTC liegt im Peak-Fenster, aber Wochenende -> off-peak.
@@ -60,8 +69,8 @@ class TestGetTariff:
         assert flash_peak == {"cache_hit": 0.006, "cache_miss": 0.30, "output": 1.20}
         assert flash_off == {"cache_hit": 0.003, "cache_miss": 0.15, "output": 0.60}
 
-    def test_pro_model(self):
-        pro_peak = get_tariff("deepseek-v4-pro", PEAK_TS)
+    def test_pro_model_uses_configured_pro_rates(self):
+        pro_peak = get_tariff("deepseek-v4-pro", "2026-09-11T11:30:42+02:00")
         assert pro_peak == {"cache_hit": 0.044, "cache_miss": 1.32, "output": 3.96}
 
     def test_unknown_model_falls_back_to_flash(self):
@@ -83,7 +92,9 @@ class TestPricingPersistence:
             }
         }
         save_pricing(s, custom)
-        assert load_pricing(s) == custom
+        expected = dict(DEFAULT_PRICING)
+        expected["deepseek-flash"] = custom["deepseek-flash"]
+        assert load_pricing(s) == expected
 
     def test_invalid_json_falls_back_to_defaults(self, tmp_path):
         s = Storage(str(tmp_path / "test.db"))
@@ -125,7 +136,8 @@ class TestCostCalc:
     def test_pro_model_cost(self):
         # miss=1000, hit=0, output=500, pro peak
         # (1000*1.32 + 0 + 500*3.96)/1e6 = (1320 + 1980)/1e6 = 0.0033
-        u = self._usage(PEAK_TS, model="deepseek-v4-pro")
+        # Use a known Pro-rate period for the usage-cost regression.
+        u = self._usage("2026-09-11T11:30:42+02:00", model="deepseek-v4-pro")
         expected = (1000 * 1.32 + 500 * 3.96) / 1e6
         assert calc_usage_cost(u) == round(expected, 8)
 
