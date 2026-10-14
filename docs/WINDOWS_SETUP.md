@@ -112,3 +112,40 @@ Unregister-ScheduledTask -TaskName "DeepSeek-Proxy" -Confirm:$false
 `%APPDATA%\Code\User\chatLanguageModels.json`) — see
 [section 6 of `INSTALLATION.md`](INSTALLATION.md#6-set-up-vs-code-custom-endpoint);
 the proxy listens on `http://127.0.0.1:8000/anthropic`.
+
+---
+
+## 7. Automated CI build (GitHub Actions)
+
+The Windows `.exe` files can also be built automatically in CI instead of
+locally. The workflow `.github/workflows/build-windows.yml` runs on
+`windows-latest`, reads the version centrally from
+`deepseek_monitor/_version.py`, and produces `DeepSeek-Monitor-<version>.exe`
+and `DeepSeek-Proxy-<version>.exe`.
+
+Two triggers:
+
+- **Tag `v*`** — builds and attaches both `.exe` files to a GitHub Release
+  (release notes are generated automatically).
+- **`workflow_dispatch`** — manual start via *Actions → Build Windows EXE →
+  Run workflow*; the `.exe` files are uploaded as workflow artifacts.
+
+### Releasing a new version
+
+1. Bump the version in `deepseek_monitor/_version.py` (single source of truth),
+   e.g. `__version__ = "0.2.1"`, and commit.
+2. Push and tag:
+
+   ```powershell
+   git push
+   git tag v0.2.1
+   git push origin v0.2.1
+   ```
+
+The CI build then runs, builds both EXEs with the new version number in the
+filename, and publishes them on the release page.
+
+> Note: the version number in the `.exe` filename comes from
+> `deepseek_monitor/_version.py`; the EXEs also report this version internally
+> (settings header / `--version`). Keep the two in sync by only ever editing
+> `_version.py`.

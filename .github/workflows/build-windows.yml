@@ -1,0 +1,77 @@
+name: Build Windows EXE
+
+# Baut die beiden Standalone-EXEs (Monitor + Proxy) auf Windows und
+# veröffentlicht sie als Release-Assets (bei Tags) bzw. als Artifacts
+# (bei manuellem Start). Die Versionsnummer kommt zentral aus
+# deepseek_monitor/_version.py und wird in den Dateinamen eingebettet.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Version aus _version.py auslesen
+        id: version
+        shell: pwsh
+        run: |
+          $v = python -c "import sys; sys.path.insert(0, '.'); import deepseek_monitor._version as m; print(m.__version__)"
+          Write-Host "Version: $v"
+          Write-Output "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Build-Abhängigkeiten installieren
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+          python -m pip install -r deepseek-proxy/requirements.txt
+          # tzdata + zstandard werden auf Windows benötigt (IANA tz-Datenbank / zstd-Decodierung).
+          python -m pip install tzdata zstandard
+
+      - name: EXEs bauen
+        shell: pwsh
+        run: |
+          powershell -ExecutionPolicy Bypass -File packaging\build-windows.ps1
+
+      - name: Mit Versionsnummer umbenennen
+        shell: pwsh
+        run: |
+          $v = "${{ steps.version.outputs.version }}"
+          Copy-Item dist\DeepSeek-Monitor.exe "dist\DeepSeek-Monitor-$v.exe"
+          Copy-Item dist\DeepSeek-Proxy.exe "dist\DeepSeek-Proxy-$v.exe"
+          Get-ChildItem dist -File | Select-Object Name, Length
+
+      - name: Release-Assets hochladen (bei Tags)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/DeepSeek-Monitor-${{ steps.version.outputs.version }}.exe
+            dist/DeepSeek-Proxy-${{ steps.version.outputs.version }}.exe
+          generate_release_notes: true
+
+      - name: Artifacts hochladen (manueller Start)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepseek-monitor-windows-${{ steps.version.outputs.version }}
+          path: |
+            dist/DeepSeek-Monitor-${{ steps.version.outputs.version }}.exe
+            dist/DeepSeek-Proxy-${{ steps.version.outputs.version }}.exe
+          if-no-files-found: error

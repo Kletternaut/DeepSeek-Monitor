@@ -51,6 +51,7 @@ python -m PyInstaller --noconfirm --clean --onefile --console `
     --hidden-import deepseek_monitor.persistence `
     --hidden-import deepseek_monitor.assets `
     --hidden-import proxy.influx_dialog `
+    --hidden-import zstandard `
     --icon assets\deepseek-proxy-256.png `
     deepseek-proxy\main.py
 
