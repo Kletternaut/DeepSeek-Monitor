@@ -27,14 +27,6 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Version aus _version.py auslesen
-        id: version
-        shell: pwsh
-        run: |
-          $v = python -c "import sys; sys.path.insert(0, '.'); import deepseek_monitor._version as m; print(m.__version__)"
-          Write-Host "Version: $v"
-          Write-Output "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
       - name: Build-Abhängigkeiten installieren
         shell: pwsh
         run: |
@@ -43,6 +35,17 @@ jobs:
           python -m pip install -r deepseek-proxy/requirements.txt
           # tzdata + zstandard werden auf Windows benötigt (IANA tz-Datenbank / zstd-Decodierung).
           python -m pip install tzdata zstandard
+
+      - name: Version aus _version.py auslesen
+        id: version
+        shell: pwsh
+        run: |
+          # Erst NACH der Installation von tzdata auslesen: der Import von
+          # deepseek_monitor._version fuehrt deepseek_monitor/__init__.py aus,
+          # das zoneinfo (und damit tzdata) benoetigt.
+          $v = python -c "import deepseek_monitor._version as m; print(m.__version__)"
+          Write-Host "Version: $v"
+          Write-Output "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: EXEs bauen
         shell: pwsh
