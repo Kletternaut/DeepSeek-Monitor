@@ -157,3 +157,110 @@ def test_upstream_error_maps_to_502():
             assert resp.status_code == 502
 
     asyncio.run(run())
+
+
+def test_gzip_encoded_response_is_decompressed_for_monitoring():
+    """Regression: DeepSeek compresses responses; usage must still be captured.
+
+    The bytes forwarded to the client stay byte-exact (still gzip), but the
+    monitoring copy is decompressed so the SSE parser sees the usage object.
+    """
+    import gzip
+
+    gzip_body = gzip.compress(SSE_BODY)
+
+    async def run():
+        received = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                stream=_SSEStream(gzip_body),
+                headers={
+                    "content-type": "text/event-stream; charset=utf-8",
+                    "content-encoding": "gzip",
+                },
+            )
+
+        mock_transport = httpx.MockTransport(handler)
+        server = DeepSeekProxyServer(usage_callback=received.append)
+
+        with patch(
+            "proxy.server.httpx.AsyncClient",
+            side_effect=_fake_async_client_factory(mock_transport),
+        ):
+            resp = await _post(
+                server,
+                "/anthropic/v1/messages",
+                body=REQUEST_BODY,
+                headers={
+                    "x-api-key": "sk-test-123",
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+            )
+            # httpx decodes the passthrough body; the decoded result is the
+            # original SSE stream, proving the gzip bytes were forwarded intact.
+            streamed = await resp.aread()
+
+        assert streamed == SSE_BODY
+        assert resp.headers["content-encoding"] == "gzip"
+
+        # Usage extraction must still work despite the compression.
+        assert len(received) == 1
+        usage = received[0]
+        assert usage.input_tokens == 55
+        assert usage.output_tokens == 12
+        assert usage.total_tokens == 67
+
+    asyncio.run(run())
+
+
+def test_zstd_encoded_response_is_decompressed_for_monitoring():
+    """Regression: DeepSeek answers VS Code with ``zstd``; usage must be captured."""
+    import zstandard
+
+    zstd_body = zstandard.ZstdCompressor().compress(SSE_BODY)
+
+    async def run():
+        received = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                stream=_SSEStream(zstd_body),
+                headers={
+                    "content-type": "text/event-stream; charset=utf-8",
+                    "content-encoding": "zstd",
+                },
+            )
+
+        mock_transport = httpx.MockTransport(handler)
+        server = DeepSeekProxyServer(usage_callback=received.append)
+
+        with patch(
+            "proxy.server.httpx.AsyncClient",
+            side_effect=_fake_async_client_factory(mock_transport),
+        ):
+            resp = await _post(
+                server,
+                "/anthropic/v1/messages",
+                body=REQUEST_BODY,
+                headers={
+                    "x-api-key": "sk-test-123",
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+            )
+            streamed = await resp.aread()
+
+        assert streamed == SSE_BODY
+        assert resp.headers["content-encoding"] == "zstd"
+
+        assert len(received) == 1
+        usage = received[0]
+        assert usage.input_tokens == 55
+        assert usage.output_tokens == 12
+        assert usage.total_tokens == 67
+
+    asyncio.run(run())

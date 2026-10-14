@@ -20,6 +20,13 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
+> **Note:** the proxy decompresses `gzip`/`deflate`/`zstd` responses from the
+> upstream API so token usage is captured even when DeepSeek answers with a
+> compressed body (VS Code advertises `Accept-Encoding: zstd`). This requires
+> the `zstandard` package, which is part of `requirements.txt`. If you already
+> had the proxy installed, run `.venv/bin/pip install zstandard` and restart
+> the service.
+
 ### InfluxDB (optional)
 
 To make the proxy additionally write usage to a central InfluxDB 2.x, create an

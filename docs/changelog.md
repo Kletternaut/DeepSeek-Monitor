@@ -2,6 +2,7 @@
 
 ## Unreleased — API proxy and monitor review
 
+- Fixed usage capture for compressed DeepSeek responses: the proxy now decompresses `gzip`, `deflate` and `zstd` response bodies in the monitoring path before parsing SSE/JSON usage (added `zstandard` dependency). The byte-exact passthrough to the client remains unchanged.
 - Repositioned project documentation and package metadata around the API proxy and token-usage monitor.
 - Hardened pricing-table validation and added a conservative parser for the official DeepSeek pricing page; incomplete or ambiguous pages do not overwrite stored prices.
 - Fixed capture of usage reported in nested Anthropic `message_start.message.usage` events and expanded regression coverage.

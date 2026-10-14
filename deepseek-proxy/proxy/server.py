@@ -39,6 +39,7 @@ import inspect
 import json
 import logging
 import threading
+import zlib
 from collections.abc import Callable, Iterable, Sequence
 from typing import Any
 from urllib.parse import urlsplit
@@ -82,6 +83,32 @@ _DROP_RESPONSE_HEADERS = _HOP_BY_HOP | {"content-length"}
 
 #: Upper bound for buffering a non-SSE/JSON response for usage extraction.
 _MAX_JSON_BUFFER = 1 << 20  # 1 MiB
+
+
+def _make_decompressor(content_encoding: str | None):
+    """Return an incremental decompressor for the response ``content-encoding``.
+
+    ``None`` is returned for uncompressed (``identity``) responses. ``gzip``,
+    ``deflate`` and ``zstd`` are supported (DeepSeek answers VS Code with
+    ``zstd`` when the client advertises it); any other encoding raises
+    ``ValueError`` and the caller falls back to raw passthrough. The client
+    keeps receiving the original compressed bytes unchanged.
+    """
+    encoding = (content_encoding or "").strip().lower()
+    if not encoding or encoding == "identity":
+        return None
+    if encoding == "gzip":
+        return zlib.decompressobj(zlib.MAX_WBITS | 16)
+    if encoding == "deflate":
+        return zlib.decompressobj(zlib.MAX_WBITS)
+    if encoding == "zstd":
+        try:
+            import zstandard
+        except ImportError as exc:  # pragma: no cover - depends on install
+            raise ValueError("zstandard not installed for zstd decoding") from exc
+        return zstandard.ZstdDecompressor().decompressobj()
+    raise ValueError(f"unsupported content-encoding: {encoding!r}")
+
 
 UsageCallback = Callable[[TokenUsage], Any]
 
@@ -412,6 +439,20 @@ class DeepSeekProxyServer:
         is_sse = "text/event-stream" in content_type
         json_buffer = bytearray()
 
+        # DeepSeek compresses responses (``content-encoding: gzip``) while the
+        # bytes are forwarded to the client byte-exact. The monitoring copy must
+        # be decompressed first so the SSE/JSON parser sees plain text.
+        content_encoding = upstream.headers.get("content-encoding")
+        try:
+            decompressor = _make_decompressor(content_encoding)
+        except ValueError as exc:
+            logger.warning(
+                "Monitoring cannot decompress %r: %s",
+                content_encoding,
+                exc,
+            )
+            decompressor = None
+
         def on_sse_event(_event_name: str | None, data: str | None) -> None:
             if not data:
                 return
@@ -439,10 +480,13 @@ class DeepSeekProxyServer:
                     continue
                 # Monitoring first, but fully isolated.
                 try:
+                    plain = chunk
+                    if decompressor is not None:
+                        plain = decompressor.decompress(chunk)
                     if is_sse:
-                        parser.feed(chunk)
+                        parser.feed(plain)
                     elif len(json_buffer) < _MAX_JSON_BUFFER:
-                        json_buffer.extend(chunk)
+                        json_buffer.extend(plain)
                 except Exception:
                     logger.exception("Error in usage monitoring (stream continues)")
                 yield chunk

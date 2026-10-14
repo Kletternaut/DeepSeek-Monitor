@@ -60,14 +60,14 @@ This repository bundles two components for monitoring DeepSeek API usage:
     ├── main.py                  # standalone entry point (flags + usage callback, --view = Tkinter view only, --tray = tray icon)
     ├── deepseek-proxy.service   # systemd unit (auto-start, EnvironmentFile=influx.env)
     ├── deepseek-proxy.desktop.example  # desktop entry to start the proxy manually (instead of systemd)
-    ├── requirements.txt         # dependencies (fastapi, uvicorn, httpx, influxdb-client, pytest)
+    ├── requirements.txt         # dependencies (fastapi, uvicorn, httpx, zstandard, influxdb-client, pytest)
     ├── checkpoint.py            # validation: checkpoints + cache test against DeepSeek ground truth
     ├── e2e_test.py              # end-to-end test: real request through the local proxy
     ├── live_test.py             # one-off live test: inspect a real DeepSeek response (usage format)
     ├── validation_test.py       # compares proxy-recorded tokens/cost with official DeepSeek sources
     ├── proxy/
     │   ├── __init__.py          # package marker
-    │   ├── server.py            # streaming proxy (FastAPI + uvicorn + httpx)
+    │   ├── server.py            # streaming proxy (FastAPI + uvicorn + httpx); decompresses gzip/deflate/zstd responses for usage monitoring
     │   ├── usage.py             # TokenUsage + merge_usage
     │   ├── sse.py               # incremental SSE parser
     │   ├── storage.py           # SQLite persistence (~/.local/state/deepseek/usage.db or %LOCALAPPDATA%)
