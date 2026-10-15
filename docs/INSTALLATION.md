@@ -109,10 +109,16 @@ To use one:
    cp deepseek-monitor.desktop.example ~/.local/share/applications/deepseek-monitor.desktop
    cp deepseek-proxy/deepseek-proxy.desktop.example ~/.local/share/applications/deepseek-proxy.desktop
    ```
-2. Edit the copied file and replace `/home/USER` in the `Icon=` and `Exec=` lines
-   with your absolute installation path (the directory created by `git clone`,
-   e.g. `/home/alice/DeepSeek-Monitor`). Desktop entries do **not** expand shell
-   variables like `$HOME`, so an absolute path is required.
+2. The `Exec=` lines already use `$HOME` (wrapped in `sh -c`), so the monitor
+   and proxy start correctly on any machine without editing — no matter the
+   username. If you cloned the repository under a different folder name than
+   `DeepSeek-Monitor`, adjust that folder name in the `Exec=` lines.
+
+   The `Icon=` field is resolved by the desktop environment **without** a
+   shell, so `$HOME` does not expand there. Replace `/home/USER` in the
+   `Icon=` lines with your absolute home path, or install the icons to
+   `~/.local/share/icons/hicolor/scalable/apps/` and reference them by name
+   (`Icon=deepseek-monitor` / `Icon=deepseek-proxy`).
 
 The icon files referenced by `Icon=` (`assets/deepseek-monitor-256.png` and
 `assets/deepseek-proxy-256.png`) are already part of the repository, so no

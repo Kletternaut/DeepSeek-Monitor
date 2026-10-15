@@ -3,7 +3,7 @@ Type=Application
 Name=DeepSeek Proxy
 Comment=Start the DeepSeek streaming proxy manually (without systemd)
 Icon=/home/USER/DeepSeek-Monitor/assets/deepseek-proxy-256.png
-Exec=/home/USER/DeepSeek-Monitor/deepseek-proxy/.venv/bin/python /home/USER/DeepSeek-Monitor/deepseek-proxy/main.py
+Exec=sh -c 'exec "$HOME/DeepSeek-Monitor/deepseek-proxy/.venv/bin/python" "$HOME/DeepSeek-Monitor/deepseek-proxy/main.py"'
 Terminal=true
 Categories=Development;Network;
 Keywords=DeepSeek;Proxy;Monitoring;Usage;
@@ -12,11 +12,15 @@ Keywords=DeepSeek;Proxy;Monitoring;Usage;
 # Example desktop entry to start the proxy manually instead of via systemd.
 #
 # How to use:
-#   1. Replace /home/USER with the absolute path of your installation
-#      (the directory created by `git clone`, e.g. /home/alice/DeepSeek-Monitor)
-#      in the Icon= and Exec= lines above. Desktop entries do NOT expand
-#      shell variables like $HOME, so an absolute path is required.
-#   2. Copy this file to ~/.local/share/applications/deepseek-proxy.desktop
+#   1. The `Exec=` line uses `sh -c` with `$HOME`, so it works on any machine
+#      without editing — regardless of username. If you cloned the repo under
+#      a different folder name, adjust `DeepSeek-Monitor` in the `Exec=` line.
+#   2. The `Icon=` field is resolved by the desktop environment WITHOUT a
+#      shell, so `$HOME` does not expand there. Replace `/home/USER` with your
+#      absolute home path in the `Icon=` line, or install the icon to
+#      ~/.local/share/icons/hicolor/scalable/apps/deepseek-proxy.svg and
+#      set `Icon=deepseek-proxy`.
+#   3. Copy this file to ~/.local/share/applications/deepseek-proxy.desktop
 #      (or /usr/share/applications/ for all users).
 #
 # A desktop entry does NOT need the executable bit.
